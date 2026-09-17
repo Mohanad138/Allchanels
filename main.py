@@ -206,6 +206,60 @@ def call_gemini(prompt, api_key, max_retries=3):
     raise RuntimeError("gemini call failed after retries")
 
 
+def call_gemini_vision(image_path, api_key, max_retries=3):
+    """يفحص صورة: هل فيها نص مكتوب (بأي لغة)؟ إذا نعم يرجع ترجمته/صياغته كتعليق عربي طبيعي.
+    يستخدم فقط عند غياب أي تعليق نصي على المنشور، عشان ما ينزل منشور صورة فاضية
+    وفيها نص أجنبي محد يفهمه القاري العربي."""
+    if not api_key:
+        return {"has_text": False, "caption": ""}
+    try:
+        with open(image_path, "rb") as f:
+            import base64
+            img_b64 = base64.b64encode(f.read()).decode()
+    except Exception:
+        return {"has_text": False, "caption": ""}
+
+    ext = image_path.lower().rsplit(".", 1)[-1]
+    mime = "image/png" if ext == "png" else "image/jpeg"
+
+    prompt = """افحص هذه الصورة: هل يوجد عليها أي نص مكتوب (عنوان، جملة، شعار كتابي) بأي لغة؟
+- إذا يوجد نص، لخّصه وأعد صياغته كتعليق قصير طبيعي بالعربية الفصحى (وليس ترجمة حرفية)، بدون وصف الصورة نفسها.
+- إذا لا يوجد أي نص مكتوب على الصورة إطلاقاً، اجعل has_text=false و caption فارغة.
+
+أعد النتيجة بصيغة JSON فقط: {"has_text": true/false, "caption": "النص بالعربية أو فارغ"}"""
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
+    headers = {"x-goog-api-key": api_key, "Content-Type": "application/json"}
+    body = {"contents": [{"parts": [
+        {"inline_data": {"mime_type": mime, "data": img_b64}},
+        {"text": prompt},
+    ]}]}
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            resp = requests.post(url, json=body, headers=headers, timeout=30)
+            if resp.status_code in (429, 500, 502, 503, 504) and attempt < max_retries:
+                time.sleep(2 ** attempt)
+                continue
+            resp.raise_for_status()
+            data = resp.json()
+            raw = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+            if raw.startswith("```"):
+                raw = raw.strip("`").strip()
+                if raw.lower().startswith("json"):
+                    raw = raw[4:].strip()
+            result = json.loads(raw)
+            return {"has_text": bool(result.get("has_text", False)),
+                    "caption": (result.get("caption") or "").strip()}
+        except Exception as e:
+            if attempt < max_retries:
+                time.sleep(2 ** attempt)
+                continue
+            print(f"⚠️ خطأ فحص نص الصورة: {e}")
+            return {"has_text": False, "caption": ""}
+    return {"has_text": False, "caption": ""}
+
+
 def check_is_ad(text, api_key):
     prompt = f"""حدد فقط إذا كان النص التالي إعلاناً أو محتوى ترويجياً (دعاية/عرض تجاري/رعاية مدفوعة). لا تعدل النص إطلاقاً.
 النص:
@@ -327,24 +381,36 @@ async def process_batch(source_id, messages):
         print(f"⏭️  تم تجاهل منشور (إعلان) — {config['name']}")
         return
 
+    media_msgs = [m for m in messages if m.photo or m.video or m.document]
+
+    # تحميل كل ملف لحاله — فشل ملف وحد (فيديو ثقيل مثلاً) ما يسقط بقية الألبوم
+    files = []
+    for m in media_msgs:
+        try:
+            path = await client.download_media(m, file=f"{DOWNLOAD_DIR}/")
+            if path:
+                files.append(path)
+            else:
+                print(f"⚠️ تحميل فاشل (بدون خطأ) — {config['name']}")
+        except Exception as e:
+            print(f"⚠️ خطأ تحميل ملف وسائط — {config['name']}: {e}")
+
+    # لو المنشور صورة بلا أي تعليق نصي، وبالوضع ترجمة/إعادة صياغة —
+    # افحص إذا الصورة نفسها فيها نص أجنبي مكتوب، وترجمه بدل ما ينزل منشور فاضي
+    if (not final_text.strip() and files
+            and config["mode"] in ("translate_en_ar", "rephrase_ar")):
+        first_image = next((f for f in files if f.lower().endswith((".jpg", ".jpeg", ".png", ".webp"))), None)
+        if first_image:
+            vision = call_gemini_vision(first_image, config["gemini_key"])
+            if vision["has_text"] and vision["caption"]:
+                final_text = vision["caption"]
+
     if config.get("add_link") and config.get("link"):
         link_text = config["link"]
         final_text = f"{final_text}\n\n{link_text}" if final_text else link_text
 
-    media_msgs = [m for m in messages if m.photo or m.video or m.document]
-
     try:
-        if media_msgs:
-            files = []
-            for m in media_msgs:
-                path = await client.download_media(m, file=f"{DOWNLOAD_DIR}/")
-                if path:
-                    files.append(path)
-            if not files:
-                if final_text:
-                    await client.send_message(config["target"], final_text,
-                                               parse_mode="html", link_preview=False)
-                return
+        if files:
             to_send = files[0] if len(files) == 1 else files
             await client.send_file(config["target"], to_send,
                                     caption=final_text or None, parse_mode="html")
@@ -354,6 +420,14 @@ async def process_batch(source_id, messages):
                 except OSError:
                     pass
             print(f"✅ نُشر (وسائط) — {config['name']}")
+        elif media_msgs and not files:
+            # كل ملفات الوسائط فشل تحميلها — لا تنشر منشور فاضي بلا وسائط ولا نص أصلي
+            if final_text:
+                await client.send_message(config["target"], final_text,
+                                           parse_mode="html", link_preview=False)
+                print(f"⚠️ نُشر نص فقط (فشل تحميل الوسائط) — {config['name']}")
+            else:
+                print(f"❌ تم تجاهل منشور — فشل تحميل كل الوسائط وما فيه نص — {config['name']}")
         elif final_text:
             await client.send_message(config["target"], final_text,
                                        parse_mode="html", link_preview=False)
