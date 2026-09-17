@@ -1,0 +1,51 @@
+name: Unified Relay Bot (polling)
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # كل 5 دقائق — أقل حد مسموح فعلياً بـ GitHub، كل تشغيلة قصيرة وتطفي
+  workflow_dispatch:
+
+concurrency:
+  group: relay-${{ github.workflow }}
+  cancel-in-progress: false   # يمنع تشغيلين متزامنين بنفس TG_SESSION (يفادي AuthKeyDuplicatedError)
+
+permissions:
+  contents: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10   # تشغيلة بولينغ قصيرة — لا حاجة لساعات بعد الآن
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Configure git
+        run: |
+          git config user.name "relay-bot"
+          git config user.email "relay-bot@users.noreply.github.com"
+
+      - name: Run bot
+        env:
+          TG_API_ID: ${{ secrets.TG_API_ID }}
+          TG_API_HASH: ${{ secrets.TG_API_HASH }}
+          TG_SESSION: ${{ secrets.TG_SESSION }}
+          GEMINI_KEY_FABRIZ: ${{ secrets.GEMINI_KEY_FABRIZ }}
+          GEMINI_KEY_SHAKO: ${{ secrets.GEMINI_KEY_SHAKO }}
+          GEMINI_KEY_TECH: ${{ secrets.GEMINI_KEY_TECH }}
+          GEMINI_KEY_AFLAM: ${{ secrets.GEMINI_KEY_AFLAM }}
+          GEMINI_KEY_GTA: ${{ secrets.GEMINI_KEY_GTA }}
+          GEMINI_KEY_MEDIA: ${{ secrets.GEMINI_KEY_MEDIA }}
+          GEMINI_KEY_GENERAL: ${{ secrets.GEMINI_KEY_GENERAL }}
+          GEMINI_KEY_HADAF: ${{ secrets.GEMINI_KEY_HADAF }}
+        run: python main.py
