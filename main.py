@@ -328,8 +328,8 @@ async def process_batch(source_id, messages):
         return
 
     if config.get("add_link") and config.get("link"):
-        link_html = f'<a href="{config["link"]}">قناتنا</a>'
-        final_text = f"{final_text}\n\n{link_html}" if final_text else link_html
+        link_text = config["link"]
+        final_text = f"{final_text}\n\n{link_text}" if final_text else link_text
 
     media_msgs = [m for m in messages if m.photo or m.video or m.document]
 
