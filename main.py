@@ -383,51 +383,70 @@ async def process_batch(source_id, messages):
 
     media_msgs = [m for m in messages if m.photo or m.video or m.document]
 
-    # تحميل كل ملف لحاله — فشل ملف وحد (فيديو ثقيل مثلاً) ما يسقط بقية الألبوم
-    files = []
-    for m in media_msgs:
-        try:
-            path = await client.download_media(m, file=f"{DOWNLOAD_DIR}/")
-            if path:
-                files.append(path)
-            else:
-                print(f"⚠️ تحميل فاشل (بدون خطأ) — {config['name']}")
-        except Exception as e:
-            print(f"⚠️ خطأ تحميل ملف وسائط — {config['name']}: {e}")
-
-    # لو المنشور صورة بلا أي تعليق نصي، وبالوضع ترجمة/إعادة صياغة —
-    # افحص إذا الصورة نفسها فيها نص أجنبي مكتوب، وترجمه بدل ما ينزل منشور فاضي
-    if (not final_text.strip() and files
+    # فحص نص الصورة بالذكاء الاصطناعي (فقط عند غياب أي تعليق، بوضع ترجمة/إعادة صياغة)
+    # هذا يحتاج تحميل صورة واحدة صغيرة فقط — الفيديوهات/الملفات ما تُحمَّل إطلاقاً (انظر تحت)
+    if (not final_text.strip()
             and config["mode"] in ("translate_en_ar", "rephrase_ar")):
-        first_image = next((f for f in files if f.lower().endswith((".jpg", ".jpeg", ".png", ".webp"))), None)
-        if first_image:
-            vision = call_gemini_vision(first_image, config["gemini_key"])
-            if vision["has_text"] and vision["caption"]:
-                final_text = vision["caption"]
+        first_photo_msg = next((m for m in media_msgs if m.photo), None)
+        if first_photo_msg:
+            tmp_path = None
+            try:
+                tmp_path = await client.download_media(first_photo_msg, file=f"{DOWNLOAD_DIR}/")
+                if tmp_path:
+                    vision = call_gemini_vision(tmp_path, config["gemini_key"])
+                    if vision["has_text"] and vision["caption"]:
+                        final_text = vision["caption"]
+            except Exception as e:
+                print(f"⚠️ خطأ فحص نص الصورة — {config['name']}: {e}")
+            finally:
+                if tmp_path:
+                    try:
+                        os.remove(tmp_path)
+                    except OSError:
+                        pass
 
     if config.get("add_link") and config.get("link"):
         link_text = config["link"]
         final_text = f"{final_text}\n\n{link_text}" if final_text else link_text
 
     try:
-        if files:
-            to_send = files[0] if len(files) == 1 else files
-            await client.send_file(config["target"], to_send,
-                                    caption=final_text or None, parse_mode="html")
-            for f in files:
-                try:
-                    os.remove(f)
-                except OSError:
-                    pass
-            print(f"✅ نُشر (وسائط) — {config['name']}")
-        elif media_msgs and not files:
-            # كل ملفات الوسائط فشل تحميلها — لا تنشر منشور فاضي بلا وسائط ولا نص أصلي
-            if final_text:
-                await client.send_message(config["target"], final_text,
-                                           parse_mode="html", link_preview=False)
-                print(f"⚠️ نُشر نص فقط (فشل تحميل الوسائط) — {config['name']}")
-            else:
-                print(f"❌ تم تجاهل منشور — فشل تحميل كل الوسائط وما فيه نص — {config['name']}")
+        if media_msgs:
+            # نرسل الوسائط بالإشارة المباشرة لملفها على سيرفرات تلجرام — بدون تحميل
+            # أو إعادة رفع محلياً. هذا يشتغل حتى لفيديوهات/ملفات بأحجام كبيرة جداً
+            # (جيجابايتات) بدون ما يمر أي بايت عبر GitHub Actions، وتلقائياً ما يظهر
+            # اسم/قناة المرسل الأصلي لأنها رسالة جديدة مو Forward.
+            to_send = media_msgs[0].media if len(media_msgs) == 1 else [m.media for m in media_msgs]
+            try:
+                await client.send_file(config["target"], to_send,
+                                        caption=final_text or None, parse_mode="html")
+                print(f"✅ نُشر (وسائط) — {config['name']}")
+            except Exception as e:
+                print(f"⚠️ فشل النسخ المباشر، محاولة تحميل احتياطي — {config['name']}: {e}")
+                # احتياط نادر: لو فشلت الإشارة المباشرة (مثلاً ملف قديم جداً)، جرّب تحميل حقيقي
+                files = []
+                for m in media_msgs:
+                    try:
+                        path = await client.download_media(m, file=f"{DOWNLOAD_DIR}/")
+                        if path:
+                            files.append(path)
+                    except Exception as e2:
+                        print(f"⚠️ فشل التحميل الاحتياطي لملف — {config['name']}: {e2}")
+                if files:
+                    to_send2 = files[0] if len(files) == 1 else files
+                    await client.send_file(config["target"], to_send2,
+                                            caption=final_text or None, parse_mode="html")
+                    for f in files:
+                        try:
+                            os.remove(f)
+                        except OSError:
+                            pass
+                    print(f"✅ نُشر (وسائط، تحميل احتياطي) — {config['name']}")
+                elif final_text:
+                    await client.send_message(config["target"], final_text,
+                                               parse_mode="html", link_preview=False)
+                    print(f"⚠️ نُشر نص فقط (فشل النسخ والتحميل) — {config['name']}")
+                else:
+                    print(f"❌ تم تجاهل منشور — فشل كل محاولات نشر الوسائط — {config['name']}")
         elif final_text:
             await client.send_message(config["target"], final_text,
                                        parse_mode="html", link_preview=False)
