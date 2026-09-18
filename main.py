@@ -82,6 +82,8 @@ CHANNELS = {
         "mode": "translate_en_ar",
         "gemini_key": GEMINI_KEY_TECH,
         "source_username": "@tech",
+        "add_link": True,
+        "link": "https://t.me/TechNewsArab",
     },
     -1001073231505: {
         "name": "أثر",
@@ -158,6 +160,7 @@ def clean_text(text, source_username=None):
     cleaned = text
     cleaned = re.sub(r'https?://\S+', '', cleaned)
     cleaned = re.sub(r't\.me/\S+', '', cleaned)
+    cleaned = cleaned.replace('📊', '')
     if source_username:
         cleaned = re.sub(re.escape(source_username), '', cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r'(?i)forwarded from.*', '', cleaned)
@@ -274,7 +277,7 @@ def check_is_ad(text, api_key):
         return False
 
 def call_translate(text, api_key):
-    prompt = f"""أنت كاتب عربي محترف. ترجم النص التالي من الإنجليزية إلى العربية بأسلوب طبيعي فصيح، كأن كاتبه الأصلي عربي وليس ترجمة حرفية.
+    prompt = f"""أنت كاتب عربي محترف. ترجم النص التالي (بأي لغة كان مكتوب — إنجليزي، روسي، أو غيرها) إلى العربية بأسلوب طبيعي فصيح، كأن كاتبه الأصلي عربي وليس ترجمة حرفية.
 تجاهل أي روابط أو إشارات لقناة المصدر. لا تضيف أي تعليق أو مقدمة من عندك.
 إذا كان النص إعلاناً أو محتوى ترويجياً اجعل should_post قيمتها false.
 
@@ -308,16 +311,19 @@ def call_rephrase(text, api_key):
         return {"should_post": True, "text": text}
 
 def call_fabrizio(text, api_key):
-    prompt = f"""أنت محرر لصفحة عربية تنقل كل منشورات حساب فابريزيو رومانو الرسمي بالعربية.
+    prompt = f"""أنت محرر لصفحة عربية تنقل أهم منشورات حساب فابريزيو رومانو الرسمي بالعربية.
 
-معايير النشر:
-- انشر كل منشور يصلك بلا استثناء (should_post = true دائماً)، سواء كان انتقالات، صفقات، تجديد
-  عقود، تغطية مباراة، نتيجة، إحصائية أو رقم للاعب، تصريح، أو أي خبر آخر مهما كان صغيراً أو هامشياً.
-- الاستثناء الوحيد: إذا كان النص إعلاناً أو محتوى ترويجياً صريحاً (دعاية لمنتج/تطبيق/رعاية مدفوعة/
-  عرض تجاري) — عندها فقط اجعل should_post = false. أي خبر رياضي حقيقي، مهما كانت أهميته، ليس إعلاناً.
-- أي منشور يحتوي على عبارة "Here we go" يُنشر دائماً (هذا مضمون بالكود أيضاً بغض النظر عن رأيك).
+معايير النشر — انشر (should_post = true) فقط إذا كان النص يندرج تحت واحد من هذي:
+- يحتوي على عبارة "Here we go" (يُنشر دائماً بلا استثناء)
+- إحصائيات لاعب (أرقام، مساهمات تهديفية، ظهورات، إلخ)
+- تغطية مباراة مباشرة: التشكيلة، بداية المباراة، نهاية الشوط الأول، نهاية المباراة، نتيجة نهائية
+- انتقال أو صفقة أو تجديد عقد (رسمي أو قريب الإتمام)
 
-الترجمة:
+أي خبر آخر غير مندرج تحت هذي الفئات (تحليلات عامة، إشاعات هامشية، تعليقات جانبية، أخبار غير مباشرة
+بالانتقالات أو المباريات) اجعل should_post = false.
+كذلك إذا كان النص إعلاناً أو محتوى ترويجياً صريحاً اجعل should_post = false.
+
+الترجمة (فقط إذا should_post = true):
 - ترجم النص إلى عربية طبيعية فصيحة كأن كاتبه عربي أصلاً.
 - أبقِ عبارة "Here we go" بالإنجليزية كما هي حرفياً بدون ترجمة إذا وردت بالنص.
 - احذف أي رابط أو إشارة لقناة المصدر (بما فيها روابط تويتر/X وإشارات "Fabrizio Romano on X").
@@ -326,11 +332,11 @@ def call_fabrizio(text, api_key):
 النص:
 {text}
 
-أعد النتيجة بصيغة JSON فقط: {{"should_post": true/false, "text": "النص المُعالج"}}"""
+أعد النتيجة بصيغة JSON فقط: {{"should_post": true/false, "text": "النص المُعالج أو فارغ"}}"""
     try:
         result = call_gemini(prompt, api_key)
-        return {"should_post": bool(result.get("should_post", True)),
-                "text": (result.get("text") or text).strip()}
+        return {"should_post": bool(result.get("should_post", False)),
+                "text": (result.get("text") or "").strip()}
     except Exception as e:
         print(f"❌ خطأ معالجة فابريزيو — لن يُنشر بلا ترجمة: {e}")
         return {"should_post": False, "text": ""}
@@ -457,17 +463,22 @@ async def process_batch(source_id, messages):
 # ==================== معالجة الرسائل الفائتة (بولينغ) ====================
 
 async def catch_up_channel(source_id):
+    config = CHANNELS.get(source_id, {})
+    # استخدم اليوزرنيم العام إذا موجود — يتحل حتى لو الحساب مو منضم للقناة.
+    # الـ ID الرقمي وحده يفشل أحياناً لو الحساب ما "شاف" القناة من قبل (access_hash غير محفوظ).
+    entity_ref = config.get("source_username") or source_id
+
     key = str(source_id)
     last_id = state.get(key, 0)
 
     if last_id == 0:
-        latest = await client.get_messages(source_id, limit=1)
+        latest = await client.get_messages(entity_ref, limit=1)
         if latest:
             last_id = max(latest[0].id - 5, 0)
         state[key] = last_id
         save_state(state)
 
-    messages = await client.get_messages(source_id, min_id=last_id, limit=200)
+    messages = await client.get_messages(entity_ref, min_id=last_id, limit=200)
     if not messages:
         return
 
@@ -498,7 +509,10 @@ async def main():
 
     for source_id, cfg in CHANNELS.items():
         print(f"⏳ فحص — {cfg['name']}")
-        await catch_up_channel(source_id)
+        try:
+            await catch_up_channel(source_id)
+        except Exception as e:
+            print(f"❌ فشل فحص قناة كامل (تخطّي — البقية بتكمل): {cfg['name']} — {e}")
 
     await client.disconnect()
     commit_state()
