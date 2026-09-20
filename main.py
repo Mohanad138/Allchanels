@@ -318,6 +318,8 @@ def call_fabrizio(text, api_key):
 - إحصائيات لاعب (أرقام، مساهمات تهديفية، ظهورات، إلخ)
 - تغطية مباراة مباشرة: التشكيلة، بداية المباراة، نهاية الشوط الأول، نهاية المباراة، نتيجة نهائية
 - انتقال أو صفقة أو تجديد عقد (رسمي أو قريب الإتمام)
+- تصريح مهم من لاعب أو مدرب أو مسؤول ناد عن انتقال، صفقة، مستقبله، أو حدث كروي مهم
+  (تصريحات عامة سطحية أو مقابلات روتينية بلا خبر فعلي لا تُحسب "مهمة")
 
 أي خبر آخر غير مندرج تحت هذي الفئات (تحليلات عامة، إشاعات هامشية، تعليقات جانبية، أخبار غير مباشرة
 بالانتقالات أو المباريات) اجعل should_post = false.
@@ -346,6 +348,10 @@ async def apply_processing(config, text):
     mode = config["mode"]
     if not text:
         return True, ""
+
+    if not config.get("gemini_key"):
+        print(f"❌ سر Gemini مفقود بهذي القناة ({config['name']}) — تأكد من إضافته بـ GitHub Secrets. لن يُنشر.")
+        return False, ""
 
     if mode == "copy":
         is_ad = check_is_ad(text, config["gemini_key"])
@@ -384,7 +390,7 @@ async def process_batch(source_id, messages):
     should_post, final_text = await apply_processing(config, cleaned)
 
     if not should_post:
-        print(f"⏭️  تم تجاهل منشور (إعلان) — {config['name']}")
+        print(f"⏭️  تم تجاهل منشور — {config['name']} (إعلان أو غير مهم، أو خطأ تقني بالمعالجة — راجع الأسطر فوق)")
         return
 
     media_msgs = [m for m in messages if m.photo or m.video or m.document]
