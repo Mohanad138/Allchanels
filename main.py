@@ -158,11 +158,14 @@ def clean_text(text, source_username=None):
     if not text:
         return ""
     cleaned = text
-    cleaned = re.sub(r'https?://\S+', '', cleaned)
-    cleaned = re.sub(r't\.me/\S+', '', cleaned)
     cleaned = cleaned.replace('📊', '')
     if source_username:
+        handle = source_username.lstrip('@')
+        # نمسح فقط رابط/إشارة قناة المصدر نفسها (يوزرنيمها) — أي رابط ثاني بالمنشور
+        # (رسمي، نتائج امتحانات، تعليمات وزارة، إلخ) يبقى كما هو ولا يُحذف
         cleaned = re.sub(re.escape(source_username), '', cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r'(https?://)?t\.me/' + re.escape(handle) + r'\b\S*',
+                          '', cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r'(?i)forwarded from.*', '', cleaned)
     cleaned = re.sub(r'أعيد التوجيه من.*', '', cleaned)
     cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
