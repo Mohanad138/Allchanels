@@ -85,12 +85,14 @@ CHANNELS = {
         "add_link": True,
         "link": "https://t.me/TechNewsArab",
     },
-    -1001073231505: {
-        "name": "أثر",
-        "target": -1001555638090,
+    -1009001073232: {
+        "name": "العراق الآن",
+        "target": "@IQNowNews",
         "mode": "copy",
         "gemini_key": GEMINI_KEY_GENERAL,
-        "source_username": "@YYAEE",
+        "source_username": "@RN24_IQ",
+        "add_link": True,
+        "link": "https://t.me/IQNowNews",
     },
     -1004443585067: {
         "name": "اهداف المباريات",
