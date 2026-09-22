@@ -168,6 +168,10 @@ def clean_text(text, source_username=None):
                           '', cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r'(?i)forwarded from.*', '', cleaned)
     cleaned = re.sub(r'أعيد التوجيه من.*', '', cleaned)
+    # حذف سطر التوقيع/الشكر اللي تضيفه قنوات ثانية بمنشورها (زي "نيمار ابن الانبار || @IRAQEDU")
+    # — يشتغل بكل القنوات، على أي سطر يحتوي هذا التوقيع بغض النظر عن الصيغة بالضبط
+    cleaned = re.sub(r'^.*نيمار\s*ابن\s*الانبار.*$', '', cleaned, flags=re.MULTILINE | re.IGNORECASE)
+    cleaned = re.sub(r'^.*@?IRAQEDU.*$', '', cleaned, flags=re.MULTILINE | re.IGNORECASE)
     cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
     return cleaned.strip()
 
