@@ -76,14 +76,14 @@ CHANNELS = {
         "add_link": True,
         "link": "https://t.me/ShakoMakoKirkuk",
     },
-    -1001498073945: {
-        "name": "أخبار التقنية",
-        "target": -1003867842495,
+    -1009001498074: {
+        "name": "أخبار المال",
+        "target": "@MalNewsAr",
         "mode": "translate_en_ar",
         "gemini_key": GEMINI_KEY_TECH,
-        "source_username": "@tech",
+        "source_username": "@WatcherGuru",
         "add_link": True,
-        "link": "https://t.me/TechNewsArab",
+        "link": "@MalNewsAr",
     },
     -1009001073232: {
         "name": "العراق الآن",
