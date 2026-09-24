@@ -19,6 +19,7 @@ import subprocess
 
 from telethon import TelegramClient
 from telethon.sessions import StringSession
+from telethon.tl.types import MessageEntityTextUrl
 import requests
 
 # ==================== الإعدادات العامة ====================
@@ -121,6 +122,14 @@ CHANNELS = {
         "add_link": True,
         "link": "https://t.me/GTA6AR",
     },
+    -1009917651232: {
+        "name": "بثوث المباريات",
+        "target": "@FabriAr2",
+        "mode": "match_links",
+        "gemini_key": GEMINI_KEY_GENERAL,
+        "source_username": "@Arena8x",
+        # بدون add_link عمداً — ما نضيف رابط قناتنا بهذي القناة
+    },
 }
 
 client = TelegramClient(StringSession(TG_SESSION), TG_API_ID, TG_API_HASH)
@@ -156,18 +165,37 @@ def commit_state():
 
 # ==================== تنظيف النص ====================
 
-def clean_text(text, source_username=None):
+def extract_hidden_link_urls(message, source_username=None):
+    """يرجع روابط 'مخفية' خلف نص مقنّع زي 'اضغط هنا للمشاهدة' — نص الرسالة العادي ما يحتوي
+    الرابط الحقيقي أصلاً، فبدون هذا الاستخراج يضيع الرابط بالكامل عند النشر.
+    يتجاهل رابط قناة المصدر نفسها (يبقى يُحذف زي باقي إشاراتها)."""
+    if not message or not getattr(message, "entities", None):
+        return []
+    handle = (source_username or "").lstrip("@").lower()
+    urls = []
+    try:
+        for entity, _ in message.get_entities_text(MessageEntityTextUrl):
+            url = entity.url
+            if handle and f"t.me/{handle}".lower() in url.lower():
+                continue
+            urls.append(url)
+    except Exception:
+        pass
+    return urls
+
+
+def clean_text(text, source_username=None, strip_telegram_links=True):
     if not text:
         return ""
     cleaned = text
     cleaned = cleaned.replace('📊', '')
     if source_username:
-        handle = source_username.lstrip('@')
-        # نمسح فقط رابط/إشارة قناة المصدر نفسها (يوزرنيمها) — أي رابط ثاني بالمنشور
-        # (رسمي، نتائج امتحانات، تعليمات وزارة، إلخ) يبقى كما هو ولا يُحذف
         cleaned = re.sub(re.escape(source_username), '', cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r'(https?://)?t\.me/' + re.escape(handle) + r'\b\S*',
-                          '', cleaned, flags=re.IGNORECASE)
+    if strip_telegram_links:
+        # احذف أي رابط تيليجرام (قناة أو مجموعة أو دعوة انضمام) موجود بالنص — سواء قناة
+        # المصدر نفسها أو أي قناة/مجموعة ثانية يروّجلها. أي رابط خارجي غير t.me (موقع رسمي،
+        # نتائج، إلخ) يبقى كما هو ولا يُحذف
+        cleaned = re.sub(r'(https?://)?t\.me/\S+', '', cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r'(?i)forwarded from.*', '', cleaned)
     cleaned = re.sub(r'أعيد التوجيه من.*', '', cleaned)
     # حذف سطر التوقيع/الشكر اللي تضيفه قنوات ثانية بمنشورها (زي "نيمار ابن الانبار || @IRAQEDU")
@@ -176,6 +204,14 @@ def clean_text(text, source_username=None):
     cleaned = re.sub(r'^.*@?IRAQEDU.*$', '', cleaned, flags=re.MULTILINE | re.IGNORECASE)
     cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
     return cleaned.strip()
+
+
+def contains_click_here_phrase(text):
+    """يفحص وجود عبارة 'اضغط هنا للمشاهدة' (وتنويعاتها) — منشورات بهذي الصيغة تُستبعد
+    بالكامل بناءً على طلب المستخدم (كثير منها طلع منشورات احتيال/تصيّد)."""
+    if not text:
+        return False
+    return bool(re.search(r'اضغط\s*هنا.{0,15}(للمشاهدة|لمشاهدة|مشاهدة)', text))
 
 # ==================== Gemini ====================
 
@@ -332,6 +368,27 @@ def call_rephrase(text, api_key):
         print(f"❌ خطأ إعادة الصياغة: {e}")
         return {"should_post": True, "text": text}
 
+def call_match_links(text, api_key):
+    prompt = f"""أنت تنسّق منشورات قناة تبث روابط مشاهدة مباريات كرة القدم. رتّب النص التالي:
+- رتّب معلومات كل مباراة بشكل واضح (الفريقين، الوقت، المعلّق) بدون حذف أي مباراة أو أي معلومة عنها.
+- احذف أي سطر يذكر رابط موقع خارجي (رابط يبدأ بـ www. أو رابط موقع/يوتيوب) وعنوانه.
+- أبقِ أي رابط دعوة تيليجرام (رابط يبدأ بـ https://t.me/+) كما هو حرفياً بدون حذف أو تعديل — هذا هو رابط المشاهدة الأساسي.
+- أبقِ أي سطر "ملاحظة" أو تعليمات انضمام/دخول كما هو حرفياً بدون حذف أو تعديل.
+- احذف اسم أو إشارة قناة المصدر نفسها (غير روابط الدعوة الخاصة بمشاهدة المباراة، هذي أبقها).
+- لا تضف أي تعليق أو مقدمة من عندك.
+
+النص:
+{text}
+
+أعد النتيجة بصيغة JSON فقط: {{"text": "النص بعد الترتيب"}}"""
+    try:
+        result = call_gemini(prompt, api_key)
+        return (result.get("text") or "").strip()
+    except Exception as e:
+        print(f"❌ خطأ تنسيق منشور المباريات: {e}")
+        return ""
+
+
 def call_fabrizio(text, api_key):
     prompt = f"""أنت محرر لصفحة عربية تنقل أهم منشورات حساب فابريزيو رومانو الرسمي بالعربية.
 
@@ -379,6 +436,10 @@ async def apply_processing(config, text):
         is_ad = check_is_ad(text, config["gemini_key"])
         return (not is_ad), text
 
+    if mode == "match_links":
+        result_text = call_match_links(text, config["gemini_key"])
+        return bool(result_text), result_text
+
     if mode == "translate_en_ar":
         result = call_translate(text, config["gemini_key"])
         return result["should_post"], result["text"]
@@ -403,12 +464,24 @@ async def process_batch(source_id, messages):
         return
 
     raw_text = ""
+    text_msg = None
     for m in messages:
         if m.message:
             raw_text = m.message
+            text_msg = m
             break
 
-    cleaned = clean_text(raw_text, config.get("source_username"))
+    if contains_click_here_phrase(raw_text):
+        print(f"⏭️  تم تجاهل منشور — {config['name']} (يحتوي 'اضغط هنا للمشاهدة' — يُستبعد دائماً)")
+        return
+
+    hidden_links = extract_hidden_link_urls(text_msg, config.get("source_username"))
+    if hidden_links:
+        # الرابط الحقيقي كان مخفي خلف نص زي "اضغط هنا" — نضيفه كنص ظاهر حتى ما يضيع
+        raw_text = (raw_text.rstrip() + "\n\n" + "\n".join(hidden_links)) if raw_text else "\n".join(hidden_links)
+
+    strip_tg_links = config["mode"] != "match_links"
+    cleaned = clean_text(raw_text, config.get("source_username"), strip_telegram_links=strip_tg_links)
     should_post, final_text = await apply_processing(config, cleaned)
 
     if not should_post:
