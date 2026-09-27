@@ -77,14 +77,14 @@ CHANNELS = {
         "add_link": True,
         "link": "https://t.me/ShakoMakoKirkuk",
     },
-    -1009001498074: {
-        "name": "أخبار المال",
-        "target": "@MalNewsAr",
+    -1009001498075: {
+        "name": "الذكاء الاصطناعي",
+        "target": "@AInewsAR1",
         "mode": "translate_en_ar",
         "gemini_key": GEMINI_KEY_TECH,
-        "source_username": "@WatcherGuru",
+        "source_username": "@aipost",
         "add_link": True,
-        "link": "@MalNewsAr",
+        "link": "@AInewsAR1",
     },
     -1009001073232: {
         "name": "العراق الآن",
