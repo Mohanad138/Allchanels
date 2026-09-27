@@ -113,14 +113,17 @@ CHANNELS = {
         "add_link": True,
         "link": "https://t.me/TalibLib",
     },
-    -1003946450145: {
+    -1009003946451: {
         "name": "تسريبات GTA 6",
         "target": -1002218686576,
         "mode": "translate_en_ar",
         "gemini_key": GEMINI_KEY_GTA,
-        "source_username": "@GTAVIStar",
+        "source_username": "@GTA6NewsEN",
         "add_link": True,
-        "link": "https://t.me/GTA6AR",
+        "link": "@GTA6AR",
+        "extra_rules": "إذا ورد أي سعر بالروبل الروسي بالنص، حوّله لمكافئه التقريبي بالدولار الأمريكي "
+                       "واكتبه بالدولار فقط بدل الروبل (استخدم تقريب تقريبي لسعر الصرف الحالي، وأشر أنه تقريبي "
+                       "بكلمة \"حوالي\"). لا تكتب الروبل إطلاقاً بالنص النهائي.",
     },
     -1009917651232: {
         "name": "بثوث المباريات",
@@ -168,15 +171,19 @@ def commit_state():
 def extract_hidden_link_urls(message, source_username=None):
     """يرجع روابط 'مخفية' خلف نص مقنّع زي 'اضغط هنا للمشاهدة' — نص الرسالة العادي ما يحتوي
     الرابط الحقيقي أصلاً، فبدون هذا الاستخراج يضيع الرابط بالكامل عند النشر.
-    يتجاهل رابط قناة المصدر نفسها (يبقى يُحذف زي باقي إشاراتها)."""
+    يتجاهل رابط قناة المصدر نفسها، وأي رابط خلف نص "Read more" أو "اقرأ المزيد"
+    (رابط لمقال بموقع المصدر — مو محتوى نحتاج ننقله)."""
     if not message or not getattr(message, "entities", None):
         return []
     handle = (source_username or "").lstrip("@").lower()
+    skip_anchor_re = re.compile(r'read\s*more|اقرأ\s*المزيد', re.IGNORECASE)
     urls = []
     try:
-        for entity, _ in message.get_entities_text(MessageEntityTextUrl):
+        for entity, anchor_text in message.get_entities_text(MessageEntityTextUrl):
             url = entity.url
             if handle and f"t.me/{handle}".lower() in url.lower():
+                continue
+            if skip_anchor_re.search(anchor_text or ""):
                 continue
             urls.append(url)
     except Exception:
@@ -197,6 +204,8 @@ def clean_text(text, source_username=None, strip_telegram_links=True):
         # نتائج، إلخ) يبقى كما هو ولا يُحذف
         cleaned = re.sub(r'(https?://)?t\.me/\S+', '', cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r'(?i)forwarded from.*', '', cleaned)
+    cleaned = re.sub(r'(?i)read\s*more\.?\s*$', '', cleaned.rstrip())
+    cleaned = re.sub(r'اقرأ\s*المزيد\.?\s*$', '', cleaned.rstrip())
     cleaned = re.sub(r'أعيد التوجيه من.*', '', cleaned)
     # حذف سطر التوقيع/الشكر اللي تضيفه قنوات ثانية بمنشورها (زي "نيمار ابن الانبار || @IRAQEDU")
     # — يشتغل بكل القنوات، على أي سطر يحتوي هذا التوقيع بغض النظر عن الصيغة بالضبط
@@ -332,12 +341,15 @@ def check_is_ad(text, api_key):
         print(f"❌ خطأ فحص الإعلان: {e}")
         return False
 
-def call_translate(text, api_key):
-    prompt = f"""أنت كاتب عربي محترف. ترجم النص التالي (بأي لغة كان مكتوب — إنجليزي، روسي، أو غيرها) إلى العربية بأسلوب طبيعي فصيح، كأن كاتبه الأصلي عربي وليس ترجمة حرفية.
+def call_translate(text, api_key, extra_rules=None):
+    extra = f"\n{extra_rules}\n" if extra_rules else ""
+    prompt = f"""أنت كاتب عربي محترف. أعد صياغة النص التالي (بأي لغة كان مكتوب — إنجليزي، روسي، أو غيرها) بالعربية بالكامل.
+**ممنوع الترجمة الحرفية كلمة-بكلمة.** اكتبه وكأنك عربي شاهدت نفس الخبر وتكتبه لأول مرة بأسلوبك — غيّر ترتيب الجملة،
+ادمج أو افصل الجمل، واستخدم تعابير عربية طبيعية شائعة بدل نقل التراكيب الأجنبية حرفياً.
 تجاهل أي روابط أو إشارات لقناة المصدر. لا تضيف أي تعليق أو مقدمة من عندك.
 إذا كان النص إعلاناً مدفوعاً أو محتوى ترويجياً تجارياً صريحاً (منتج، تطبيق، خدمة، رعاية مدفوعة) اجعل should_post = false.
 أي خبر عادي — حتى لو ذكر جوائز أو مسابقات أو أحداث — ليس إعلاناً، انشره (should_post = true). عند الشك انشر.
-
+{extra}
 النص:
 {text}
 
@@ -466,7 +478,7 @@ async def apply_processing(config, text):
         return bool(result_text), result_text
 
     if mode == "translate_en_ar":
-        result = call_translate(text, config["gemini_key"])
+        result = call_translate(text, config["gemini_key"], config.get("extra_rules"))
         return result["should_post"], result["text"]
 
     if mode == "rephrase_ar":
