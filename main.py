@@ -59,14 +59,18 @@ CHANNELS = {
         "gemini_key": GEMINI_KEY_FABRIZ,
         "source_username": "@FabrizioRomanoTG",
     },
-    -1009003922419: {
-        "name": "أفلام ومسلسلات",
-        "target": -1002651737980,
-        "mode": "translate_en_ar",
+    -1009003922420: {
+        "name": "سعر الدولار في العراق",
+        "target": "@DollarIraq24",
+        "mode": "rephrase_ar",
         "gemini_key": GEMINI_KEY_AFLAM,
-        "source_username": "@movie",
+        "source_username": "@dollariraqi",
         "add_link": True,
-        "link": "https://t.me/AflamMusalsalat4U",
+        "link": "@DollarIraq24",
+        "extra_rules": "هذا منشور عن أسعار صرف الدولار والعملات. أعد صياغته بصورة مبسطة ومختصرة وواضحة "
+                       "(سطر لكل سعر أو مدينة/سوق مثلاً)، لكن **لا تحذف أي سعر أو رقم أو مدينة أو معلومة**؛ "
+                       "فقط بسّط الصياغة واحذف الزخرفة والتكرار. أبقِ الأرقام كما هي بدقة. "
+                       "احذف أي ذكر أو يوزر أو رابط لقناة المصدر.",
     },
     -1001565832101: {
         "name": "شكو ماكو بـ كركوك",
@@ -362,12 +366,13 @@ def call_translate(text, api_key, extra_rules=None):
         print(f"❌ خطأ الترجمة — لن يُنشر بلا ترجمة: {e}")
         return {"should_post": False, "text": ""}
 
-def call_rephrase(text, api_key):
+def call_rephrase(text, api_key, extra_rules=None):
+    extra = f"\n{extra_rules}\n" if extra_rules else ""
     prompt = f"""أنت محرر صحفي عراقي. أعد صياغة النص التالي بأسلوب صحفي احترافي واضح ومختصر بالعربية.
 تجاهل أي روابط أو إشارات لقناة المصدر. لا تضيف أي تعليق من عندك.
 إذا كان النص إعلاناً مدفوعاً أو محتوى ترويجياً تجارياً صريحاً (منتج، تطبيق، خدمة، رعاية مدفوعة) اجعل should_post = false.
 أي خبر عادي — حتى لو ذكر جوائز أو مسابقات أو أحداث — ليس إعلاناً، انشره (should_post = true). عند الشك انشر.
-
+{extra}
 النص:
 {text}
 
@@ -482,7 +487,7 @@ async def apply_processing(config, text):
         return result["should_post"], result["text"]
 
     if mode == "rephrase_ar":
-        result = call_rephrase(text, config["gemini_key"])
+        result = call_rephrase(text, config["gemini_key"], config.get("extra_rules"))
         return result["should_post"], result["text"]
 
     if mode == "fabrizio_special":
