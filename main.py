@@ -207,6 +207,9 @@ def clean_text(text, source_username=None, strip_telegram_links=True):
         # المصدر نفسها أو أي قناة/مجموعة ثانية يروّجلها. أي رابط خارجي غير t.me (موقع رسمي،
         # نتائج، إلخ) يبقى كما هو ولا يُحذف
         cleaned = re.sub(r'(https?://)?t\.me/\S+', '', cleaned, flags=re.IGNORECASE)
+    # روابط t.co (اختصار تويتر/X لمعاينة الصورة أو التغريدة الأصلية) — ما تحمل أي محتوى
+    # مفيد للقارئ العربي، تُحذف دايماً من كل القنوات
+    cleaned = re.sub(r'https?://t\.co/\S+', '', cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r'(?i)forwarded from.*', '', cleaned)
     cleaned = re.sub(r'(?i)read\s*more\.?\s*$', '', cleaned.rstrip())
     cleaned = re.sub(r'اقرأ\s*المزيد\.?\s*$', '', cleaned.rstrip())
