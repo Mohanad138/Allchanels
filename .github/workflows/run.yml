@@ -2,8 +2,10 @@ name: Unified Relay Bot (polling)
 
 on:
   schedule:
-    - cron: "*/5 * * * *"   # كل 5 دقائق — أقل حد مسموح فعلياً بـ GitHub، كل تشغيلة قصيرة وتطفي
+    - cron: "*/10 * * * *"   # احتياط فقط — إذا توقف المُشغّل الخارجي لأي سبب، يضل فيه تشغيل احتياطي كل 10 دقائق
   workflow_dispatch:
+  repository_dispatch:
+    types: [run-bot]         # يُشغَّل عبر طلب خارجي (cron-job.org) — كل تشغيلة قصيرة وتطفي، نفس مبدأ الجدولة بالضبط
 
 concurrency:
   group: relay-${{ github.workflow }}
@@ -15,7 +17,7 @@ permissions:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 10   # تشغيلة بولينغ قصيرة — لا حاجة لساعات بعد الآن
+    timeout-minutes: 15   # وقت كافي لتحميل/رفع فيديوهات بدون ما ينقطع التشغيل بمنتصف الطريق
     steps:
       - name: Checkout
         uses: actions/checkout@v4
