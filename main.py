@@ -19,7 +19,7 @@ import subprocess
 
 from telethon import TelegramClient
 from telethon.sessions import StringSession
-from telethon.tl.types import MessageEntityTextUrl
+from telethon.tl.types import MessageEntityTextUrl, MessageMediaPhoto, MessageMediaDocument
 import requests
 
 # ==================== الإعدادات العامة ====================
@@ -58,6 +58,7 @@ CHANNELS = {
         "mode": "fabrizio_special",
         "gemini_key": GEMINI_KEY_FABRIZ,
         "source_username": "@FabrizioRomanoTG",
+        "skip_if_video": True,
     },
     -1009003922420: {
         "name": "سعر الدولار في العراق",
@@ -540,7 +541,16 @@ async def process_batch(source_id, messages):
         print(f"⏭️  تم تجاهل منشور — {config['name']} (إعلان أو غير مهم، أو خطأ تقني بالمعالجة — راجع الأسطر فوق)")
         return
 
-    media_msgs = [m for m in messages if m.photo or m.video or m.document]
+    # نتحقق من نوع الوسائط الفعلي (MessageMediaPhoto/Document حقيقي) بدل الخاصية العامة
+    # m.photo/m.video، لأن تيليثون أحياناً يرجّع صورة "معاينة الرابط" (thumbnail لمعاينة
+    # تغريدة مقتبسة) على إنها صورة حقيقية بالمنشور — وهذا يخلي البوت ينشرها غلط وكأنها محتوى.
+    media_msgs = [m for m in messages if isinstance(m.media, (MessageMediaPhoto, MessageMediaDocument))]
+
+    if config.get("skip_if_video") and any(m.video for m in media_msgs):
+        force_post = bool(re.search(r'here\s*we\s*go', raw_text, re.IGNORECASE))
+        if not force_post:
+            print(f"⏭️  تم تجاهل منشور — {config['name']} (يحتوي فيديو حقيقي مرفق — يُستبعد دائماً بهذي القناة)")
+            return
 
     # فحص نص الصورة بالذكاء الاصطناعي (فقط عند غياب أي تعليق، بوضع ترجمة/إعادة صياغة)
     # هذا يحتاج تحميل صورة واحدة صغيرة فقط — الفيديوهات/الملفات ما تُحمَّل إطلاقاً (انظر تحت)
