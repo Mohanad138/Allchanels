@@ -19,7 +19,8 @@ import subprocess
 
 from telethon import TelegramClient
 from telethon.sessions import StringSession
-from telethon.tl.types import MessageEntityTextUrl, MessageMediaPhoto, MessageMediaDocument
+from telethon.tl.types import (MessageEntityTextUrl, MessageMediaPhoto,
+                                MessageMediaDocument, MessageMediaWebPage)
 import requests
 
 # ==================== الإعدادات العامة ====================
@@ -172,6 +173,43 @@ def commit_state():
         print(f"⚠️ git commit error: {e}")
 
 # ==================== تنظيف النص ====================
+
+def _is_small_thumbnail_photo(photo, threshold=250):
+    """يحدد إذا كانت الصورة 'مصغّرة' (زي أفاتار حساب بمعاينة تغريدة مقتبسة) بدل صورة محتوى
+    حقيقية — بفحص أبعادها الفعلية. أي بُعد أكبر من threshold بكسل يُعتبر صورة محتوى حقيقية."""
+    try:
+        dims = [(getattr(s, "w", 0), getattr(s, "h", 0)) for s in photo.sizes if hasattr(s, "w")]
+        if not dims:
+            return False  # ما نقدر نتأكد من الحجم — الأسلم نعتبرها صورة حقيقية
+        max_w = max(w for w, _ in dims)
+        max_h = max(h for _, h in dims)
+        return max_w < threshold and max_h < threshold
+    except Exception:
+        return False
+
+
+def _is_usable_media_msg(m):
+    """هل هذي الرسالة فيها وسائط حقيقية تستاهل تُنشر؟ يستثني صور معاينة الرابط الصغيرة
+    (أفاتار حساب بمعاينة تغريدة مقتبسة) بس يبقي الصور الحقيقية حتى لو جايه من نفس آلية
+    المعاينة (زي صورة لاعب مرفقة بتغريدة أصلية)."""
+    media = m.media
+    if isinstance(media, (MessageMediaPhoto, MessageMediaDocument)):
+        return True
+    if isinstance(media, MessageMediaWebPage):
+        wp = getattr(media, "webpage", None)
+        photo = getattr(wp, "photo", None)
+        if photo and not _is_small_thumbnail_photo(photo):
+            return True
+    return False
+
+
+def _media_payload(m):
+    """الكائن المناسب لتمريره لـ send_file — Photo الحقيقي المستخرج لو كانت الوسائط من
+    نوع معاينة رابط (MessageMediaWebPage)، أو m.media مباشرة لباقي الحالات."""
+    if isinstance(m.media, MessageMediaWebPage):
+        return m.photo
+    return m.media
+
 
 def extract_hidden_link_urls(message, source_username=None):
     """يرجع روابط 'مخفية' خلف نص مقنّع زي 'اضغط هنا للمشاهدة' — نص الرسالة العادي ما يحتوي
@@ -544,7 +582,7 @@ async def process_batch(source_id, messages):
     # نتحقق من نوع الوسائط الفعلي (MessageMediaPhoto/Document حقيقي) بدل الخاصية العامة
     # m.photo/m.video، لأن تيليثون أحياناً يرجّع صورة "معاينة الرابط" (thumbnail لمعاينة
     # تغريدة مقتبسة) على إنها صورة حقيقية بالمنشور — وهذا يخلي البوت ينشرها غلط وكأنها محتوى.
-    media_msgs = [m for m in messages if isinstance(m.media, (MessageMediaPhoto, MessageMediaDocument))]
+    media_msgs = [m for m in messages if _is_usable_media_msg(m)]
 
     if config.get("skip_if_video") and any(m.video for m in media_msgs):
         force_post = bool(re.search(r'here\s*we\s*go', raw_text, re.IGNORECASE))
@@ -584,7 +622,7 @@ async def process_batch(source_id, messages):
             # أو إعادة رفع محلياً. هذا يشتغل حتى لفيديوهات/ملفات بأحجام كبيرة جداً
             # (جيجابايتات) بدون ما يمر أي بايت عبر GitHub Actions، وتلقائياً ما يظهر
             # اسم/قناة المرسل الأصلي لأنها رسالة جديدة مو Forward.
-            to_send = media_msgs[0].media if len(media_msgs) == 1 else [m.media for m in media_msgs]
+            to_send = _media_payload(media_msgs[0]) if len(media_msgs) == 1 else [_media_payload(m) for m in media_msgs]
             try:
                 await client.send_file(config["target"], to_send,
                                         caption=final_text or None, parse_mode="html")
