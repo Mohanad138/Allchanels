@@ -13,10 +13,11 @@ events.NewMessage. كل تشغيلة تفحص الرسائل الفائتة فق
 import os
 import re
 import json
+import hashlib
+import difflib
 import time
 import asyncio
 import subprocess
-import difflib
 
 from telethon import TelegramClient
 from telethon.sessions import StringSession
@@ -161,30 +162,55 @@ def save_state(state):
 
 state = load_state()
 
-DUP_HISTORY_SIZE = 15
-DUP_SIMILARITY_THRESHOLD = 0.85
+# منع تكرار المحتوى في كل قناة مصدر على حدة، حتى لو وصل المنشور بمعرّف رسالة جديد.
+# تحفظ البصمات في relay_state.json حتى تبقى فعّالة بين تشغيلات GitHub Actions.
+DUP_HISTORY_SIZE = 40
+DUP_SIMILARITY_THRESHOLD = 0.90
 
-def is_duplicate_content(source_id, text):
-    """يقارن النص الجديد بآخر 15 منشور بنفس القناة — لو فيه تشابه 85%+ يُعتبر تكرار
-    (يغطي حالات إعادة النشر بصياغة شبه مطابقة، مو بس تطابق حرفي)."""
-    if not text or not text.strip():
+
+def _normalise_for_dedupe(text):
+    text = (text or "").lower()
+    text = re.sub(r"https?://\S+|t\.me/\S+", " ", text)
+    text = re.sub(r"[^\w\u0600-\u06FF]+", " ", text, flags=re.UNICODE)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _batch_fingerprint(messages, text):
+    # نضمّن معرّفات الوسائط حتى نميّز المنشورات المصوّرة التي لا تحتوي نصاً.
+    media_ids = []
+    for msg in messages:
+        media = getattr(msg, "media", None)
+        photo = getattr(media, "photo", None)
+        document = getattr(media, "document", None)
+        obj = photo or document
+        if obj is not None and getattr(obj, "id", None) is not None:
+            media_ids.append(str(obj.id))
+    normal = _normalise_for_dedupe(text)
+    raw = normal + "|media:" + ",".join(sorted(media_ids))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest(), normal
+
+
+def is_duplicate_content(source_id, messages, text):
+    fingerprint, normal = _batch_fingerprint(messages, text)
+    if not normal and fingerprint.endswith("|media:"):
         return False
-    key = str(source_id)
-    recent = state.setdefault("recent_texts", {}).get(key, [])
-    norm = re.sub(r'\s+', ' ', text).strip().lower()
-    for prev in recent:
-        if difflib.SequenceMatcher(None, norm, prev).ratio() >= DUP_SIMILARITY_THRESHOLD:
+    bucket = state.setdefault("dedupe_history", {}).setdefault(str(source_id), [])
+    for item in bucket:
+        if item.get("hash") == fingerprint:
             return True
+        previous = item.get("text", "")
+        # similarity only for meaningful text; avoids false positives on short captions
+        if len(normal) >= 35 and len(previous) >= 35:
+            if difflib.SequenceMatcher(None, normal, previous).ratio() >= DUP_SIMILARITY_THRESHOLD:
+                return True
     return False
 
-def record_published_text(source_id, text):
-    if not text or not text.strip():
-        return
-    key = str(source_id)
-    norm = re.sub(r'\s+', ' ', text).strip().lower()
-    bucket = state.setdefault("recent_texts", {}).setdefault(key, [])
-    bucket.append(norm)
-    state["recent_texts"][key] = bucket[-DUP_HISTORY_SIZE:]
+
+def record_published_content(source_id, messages, text):
+    fingerprint, normal = _batch_fingerprint(messages, text)
+    bucket = state.setdefault("dedupe_history", {}).setdefault(str(source_id), [])
+    bucket.append({"hash": fingerprint, "text": normal, "time": int(time.time())})
+    state["dedupe_history"][str(source_id)] = bucket[-DUP_HISTORY_SIZE:]
     save_state(state)
 
 def commit_state():
@@ -285,15 +311,7 @@ def clean_text(text, source_username=None, strip_telegram_links=True):
     cleaned = re.sub(r'^.*نيمار\s*ابن\s*الانبار.*$', '', cleaned, flags=re.MULTILINE | re.IGNORECASE)
     cleaned = re.sub(r'^.*@?IRAQEDU.*$', '', cleaned, flags=re.MULTILINE | re.IGNORECASE)
     cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
-    cleaned = cleaned.strip()
-    # احذف أي سطر "زخرفي" فاضي من المحتوى الحقيقي (رموز/إيموجي بس، بلا حرف أو رقم) من نهاية
-    # النص — عشان لمّا نضيف رابطنا بالنهاية يطلع مباشرة تحت آخر جملة حقيقية (زي "شارك المنشور
-    # مع اصدقاءك:")، مو تحت سطر زخرفي فاضي كان المصدر حاطه
-    lines = cleaned.split('\n')
-    while lines and not re.search(r'[A-Za-z\u0600-\u06FF0-9]', lines[-1]):
-        lines.pop()
-    cleaned = '\n'.join(lines).rstrip()
-    return cleaned
+    return cleaned.strip()
 
 
 def contains_click_here_phrase(text):
@@ -597,6 +615,10 @@ async def process_batch(source_id, messages):
             text_msg = m
             break
 
+    if is_duplicate_content(source_id, messages, raw_text):
+        print(f"⏭️ تم تجاهل منشور مكرر — {config['name']}")
+        return
+
     if contains_click_here_phrase(raw_text):
         print(f"⏭️  تم تجاهل منشور — {config['name']} (يحتوي 'اضغط هنا للمشاهدة' — يُستبعد دائماً)")
         return
@@ -651,6 +673,7 @@ async def process_batch(source_id, messages):
         link_text = config["link"]
         final_text = f"{final_text}\n\n{link_text}" if final_text else link_text
 
+    published = False
     try:
         if media_msgs:
             # نرسل الوسائط بالإشارة المباشرة لملفها على سيرفرات تلجرام — بدون تحميل
@@ -661,6 +684,7 @@ async def process_batch(source_id, messages):
             try:
                 await client.send_file(config["target"], to_send,
                                         caption=final_text or None, parse_mode="html")
+                published = True
                 print(f"✅ نُشر (وسائط) — {config['name']}")
             except Exception as e:
                 print(f"⚠️ فشل النسخ المباشر، محاولة تحميل احتياطي — {config['name']}: {e}")
@@ -682,19 +706,25 @@ async def process_batch(source_id, messages):
                             os.remove(f)
                         except OSError:
                             pass
+                    published = True
                     print(f"✅ نُشر (وسائط، تحميل احتياطي) — {config['name']}")
                 elif final_text:
                     await client.send_message(config["target"], final_text,
                                                parse_mode="html", link_preview=False)
+                    published = True
                     print(f"⚠️ نُشر نص فقط (فشل النسخ والتحميل) — {config['name']}")
                 else:
                     print(f"❌ تم تجاهل منشور — فشل كل محاولات نشر الوسائط — {config['name']}")
         elif final_text:
             await client.send_message(config["target"], final_text,
                                        parse_mode="html", link_preview=False)
+            published = True
             print(f"✅ نُشر (نص) — {config['name']}")
     except Exception as e:
         print(f"❌ خطأ بالنشر — {config['name']}: {e}")
+
+    if published:
+        record_published_content(source_id, messages, raw_text)
 
 # ==================== معالجة الرسائل الفائتة (بولينغ) ====================
 
