@@ -13,6 +13,7 @@ events.NewMessage. كل تشغيلة تفحص الرسائل الفائتة فق
 import os
 import re
 import json
+import hashlib
 import time
 import asyncio
 import subprocess
@@ -159,6 +160,57 @@ def save_state(state):
         json.dump(state, f, ensure_ascii=False, indent=2)
 
 state = load_state()
+
+# منع تكرار المحتوى المتطابق في قناة مكتبة الطالب العراقي فقط.
+# يحتفظ بالبصمات لمدة 72 ساعة، ولا يغيّر سلوك بقية القنوات.
+STUDENT_LIBRARY_SOURCE_ID = -1001530089992
+STUDENT_LIBRARY_DEDUPE_SECONDS = 72 * 60 * 60
+
+
+def _batch_fingerprint(messages):
+    """بصمة للنص ومعرّفات الوسائط حتى نكتشف إعادة نشر المحتوى نفسه بمعرّف رسالة مختلف."""
+    parts = []
+    for message in messages:
+        text_part = (getattr(message, "message", None) or "").strip()
+        if text_part:
+            parts.append("text:" + re.sub(r"\s+", " ", text_part).casefold())
+        media = getattr(message, "media", None)
+        photo = getattr(media, "photo", None)
+        document = getattr(media, "document", None)
+        media_id = getattr(photo, "id", None) or getattr(document, "id", None)
+        if media_id is not None:
+            parts.append(f"media:{media_id}")
+    if not parts:
+        return None
+    payload = "\n".join(parts).encode("utf-8", errors="ignore")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _student_library_is_duplicate(messages):
+    fingerprint = _batch_fingerprint(messages)
+    if not fingerprint:
+        return False
+    now = int(time.time())
+    key = f"dedupe:{STUDENT_LIBRARY_SOURCE_ID}"
+    recent = [item for item in state.get(key, [])
+              if now - int(item.get("time", 0)) <= STUDENT_LIBRARY_DEDUPE_SECONDS]
+    state[key] = recent
+    return any(item.get("hash") == fingerprint for item in recent)
+
+
+def _remember_student_library_post(messages):
+    fingerprint = _batch_fingerprint(messages)
+    if not fingerprint:
+        return
+    now = int(time.time())
+    key = f"dedupe:{STUDENT_LIBRARY_SOURCE_ID}"
+    recent = [item for item in state.get(key, [])
+              if now - int(item.get("time", 0)) <= STUDENT_LIBRARY_DEDUPE_SECONDS]
+    recent.append({"hash": fingerprint, "time": now})
+    # سقف احتياطي لحجم ملف الحالة
+    state[key] = recent[-500:]
+    save_state(state)
+
 
 def commit_state():
     """يحفظ relay_state.json على GitHub — يُستدعى مرة واحدة بنهاية كل تشغيلة."""
@@ -554,6 +606,10 @@ async def process_batch(source_id, messages):
     if not config:
         return
 
+    if source_id == STUDENT_LIBRARY_SOURCE_ID and _student_library_is_duplicate(messages):
+        print(f"⏭️ تم منع منشور مكرر — {config['name']} (نفس النص/الوسائط خلال آخر 72 ساعة)")
+        return
+
     raw_text = ""
     text_msg = None
     for m in messages:
@@ -626,6 +682,8 @@ async def process_batch(source_id, messages):
             try:
                 await client.send_file(config["target"], to_send,
                                         caption=final_text or None, parse_mode="html")
+                if source_id == STUDENT_LIBRARY_SOURCE_ID:
+                    _remember_student_library_post(messages)
                 print(f"✅ نُشر (وسائط) — {config['name']}")
             except Exception as e:
                 print(f"⚠️ فشل النسخ المباشر، محاولة تحميل احتياطي — {config['name']}: {e}")
@@ -647,16 +705,22 @@ async def process_batch(source_id, messages):
                             os.remove(f)
                         except OSError:
                             pass
+                    if source_id == STUDENT_LIBRARY_SOURCE_ID:
+                        _remember_student_library_post(messages)
                     print(f"✅ نُشر (وسائط، تحميل احتياطي) — {config['name']}")
                 elif final_text:
                     await client.send_message(config["target"], final_text,
                                                parse_mode="html", link_preview=False)
+                    if source_id == STUDENT_LIBRARY_SOURCE_ID:
+                        _remember_student_library_post(messages)
                     print(f"⚠️ نُشر نص فقط (فشل النسخ والتحميل) — {config['name']}")
                 else:
                     print(f"❌ تم تجاهل منشور — فشل كل محاولات نشر الوسائط — {config['name']}")
         elif final_text:
             await client.send_message(config["target"], final_text,
                                        parse_mode="html", link_preview=False)
+            if source_id == STUDENT_LIBRARY_SOURCE_ID:
+                _remember_student_library_post(messages)
             print(f"✅ نُشر (نص) — {config['name']}")
     except Exception as e:
         print(f"❌ خطأ بالنشر — {config['name']}: {e}")
