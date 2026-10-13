@@ -3,11 +3,8 @@
 بوت الريلي الموحد — حساب شخصي واحد (Telethon) يفحص 8 قنوات مصدر كل تشغيل
 (بولينغ، بدون استماع مباشر مستمر) وينشر الجديد بـ 8 قنوات هدف.
 
-الفرق عن النسخة السابقة: هذه النسخة لا تفتح اتصال طويل الأمد ولا تستخدم
-events.NewMessage. كل تشغيلة تفحص الرسائل الفائتة فقط ثم تُغلق الاتصال —
-مصمم ليُستدعى بشكل متكرر (مثلاً كل 5 دقائق) عبر GitHub Actions cron،
-بدون مخالفة سياسة الاستخدام المقبول لـ GitHub (ممنوع تشغيل عمليات طويلة/
-مستمرة عبر Actions كأنها خادم دائم).
+هذه النسخة لا تفتح اتصال طويل الأمد ولا تستخدم events.NewMessage.
+كل تشغيلة تفحص الرسائل الفائتة فقط ثم تُغلق الاتصال.
 """
 
 import os
@@ -21,8 +18,12 @@ import subprocess
 
 from telethon import TelegramClient
 from telethon.sessions import StringSession
-from telethon.tl.types import (MessageEntityTextUrl, MessageMediaPhoto,
-                                MessageMediaDocument, MessageMediaWebPage)
+from telethon.tl.types import (
+    MessageEntityTextUrl,
+    MessageMediaPhoto,
+    MessageMediaDocument,
+    MessageMediaWebPage,
+)
 import requests
 
 # ==================== الإعدادات العامة ====================
@@ -47,12 +48,7 @@ DOWNLOAD_DIR = "downloads"
 
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-# ==================== إعدادات القنوات الثمانية ====================
-# mode:
-#   "copy"            -> نشر كما هو (بعد تنظيف الروابط) + فحص إعلانات فقط
-#   "translate_en_ar"  -> ترجمة انجليزي -> عربي طبيعي + فحص إعلانات
-#   "rephrase_ar"      -> إعادة صياغة صحفية بالعربي + فحص إعلانات
-#   "fabrizio_special" -> نفس الترجمة لكن بمعايير نشر خاصة بفابريزيو
+# ==================== إعدادات القنوات ====================
 
 CHANNELS = {
     -1001344466508: {
@@ -72,7 +68,7 @@ CHANNELS = {
         "add_link": True,
         "link": "@DollarIraq24",
         "extra_rules": "هذا منشور عن أسعار صرف الدولار والعملات. أعد صياغته بصورة مبسطة ومختصرة وواضحة "
-                       "(سطر لكل سعر أو مدينة/سوق مثلاً)، لكن **لا تحذف أي سعر أو رقم أو مدينة أو معلومة**؛ "
+                       "(سطر لكل سعر أو مدينة/سوق مثلاً)، لكن لا تحذف أي سعر أو رقم أو مدينة أو معلومة؛ "
                        "فقط بسّط الصياغة واحذف الزخرفة والتكرار. أبقِ الأرقام كما هي بدقة. "
                        "احذف أي ذكر أو يوزر أو رابط لقناة المصدر.",
     },
@@ -130,8 +126,8 @@ CHANNELS = {
         "add_link": True,
         "link": "@GTA6AR",
         "extra_rules": "إذا ورد أي سعر بالروبل الروسي بالنص، حوّله لمكافئه التقريبي بالدولار الأمريكي "
-                       "واكتبه بالدولار فقط بدل الروبل (استخدم تقريب تقريبي لسعر الصرف الحالي، وأشر أنه تقريبي "
-                       "بكلمة \"حوالي\"). لا تكتب الروبل إطلاقاً بالنص النهائي.",
+                       "واكتبه بالدولار فقط بدل الروبل، مع الإشارة إلى أنه تقريبي بكلمة «حوالي». "
+                       "لا تكتب الروبل إطلاقاً بالنص النهائي.",
     },
     -1009917651232: {
         "name": "بثوث المباريات",
@@ -139,13 +135,12 @@ CHANNELS = {
         "mode": "match_links",
         "gemini_key": GEMINI_KEY_GENERAL,
         "source_username": "@Arena8x",
-        # بدون add_link عمداً — ما نضيف رابط قناتنا بهذي القناة
     },
 }
 
 client = TelegramClient(StringSession(TG_SESSION), TG_API_ID, TG_API_HASH)
 
-# ==================== الحالة (last_id لكل قناة) ====================
+# ==================== الحالة ومنع التكرار ====================
 
 def load_state():
     if os.path.exists(STATE_FILE):
@@ -156,14 +151,13 @@ def load_state():
             return {}
     return {}
 
+
 def save_state(state):
     with open(STATE_FILE, "w", encoding="utf-8") as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
 
-state = load_state()
 
-# منع تكرار المحتوى في كل قناة مصدر على حدة، حتى لو وصل المنشور بمعرّف رسالة جديد.
-# تحفظ البصمات في relay_state.json حتى تبقى فعّالة بين تشغيلات GitHub Actions.
+state = load_state()
 DUP_HISTORY_SIZE = 40
 DUP_SIMILARITY_THRESHOLD = 0.90
 
@@ -176,7 +170,6 @@ def _normalise_for_dedupe(text):
 
 
 def _batch_fingerprint(messages, text):
-    # نضمّن معرّفات الوسائط حتى نميّز المنشورات المصوّرة التي لا تحتوي نصاً.
     media_ids = []
     for msg in messages:
         media = getattr(msg, "media", None)
@@ -199,7 +192,6 @@ def is_duplicate_content(source_id, messages, text):
         if item.get("hash") == fingerprint:
             return True
         previous = item.get("text", "")
-        # similarity only for meaningful text; avoids false positives on short captions
         if len(normal) >= 35 and len(previous) >= 35:
             if difflib.SequenceMatcher(None, normal, previous).ratio() >= DUP_SIMILARITY_THRESHOLD:
                 return True
@@ -213,27 +205,36 @@ def record_published_content(source_id, messages, text):
     state["dedupe_history"][str(source_id)] = bucket[-DUP_HISTORY_SIZE:]
     save_state(state)
 
+
 def commit_state():
-    """يحفظ relay_state.json على GitHub — يُستدعى مرة واحدة بنهاية كل تشغيلة."""
+    """يحفظ relay_state.json على GitHub بنهاية كل تشغيلة."""
     try:
         subprocess.run(["git", "add", STATE_FILE], check=False)
-        subprocess.run(["git", "commit", "-m", "update relay state"], check=False,
-                        capture_output=True)
-        subprocess.run(["git", "pull", "--rebase", "origin", "main"], check=False,
-                        capture_output=True)
+        subprocess.run(
+            ["git", "commit", "-m", "update relay state"],
+            check=False,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "pull", "--rebase", "origin", "main"],
+            check=False,
+            capture_output=True,
+        )
         subprocess.run(["git", "push"], check=False, capture_output=True)
     except Exception as e:
         print(f"⚠️ git commit error: {e}")
 
-# ==================== تنظيف النص ====================
+
+# ==================== تنظيف النص والروابط ====================
 
 def _is_small_thumbnail_photo(photo, threshold=250):
-    """يحدد إذا كانت الصورة 'مصغّرة' (زي أفاتار حساب بمعاينة تغريدة مقتبسة) بدل صورة محتوى
-    حقيقية — بفحص أبعادها الفعلية. أي بُعد أكبر من threshold بكسل يُعتبر صورة محتوى حقيقية."""
     try:
-        dims = [(getattr(s, "w", 0), getattr(s, "h", 0)) for s in photo.sizes if hasattr(s, "w")]
+        dims = [
+            (getattr(s, "w", 0), getattr(s, "h", 0))
+            for s in photo.sizes if hasattr(s, "w")
+        ]
         if not dims:
-            return False  # ما نقدر نتأكد من الحجم — الأسلم نعتبرها صورة حقيقية
+            return False
         max_w = max(w for w, _ in dims)
         max_h = max(h for _, h in dims)
         return max_w < threshold and max_h < threshold
@@ -242,9 +243,6 @@ def _is_small_thumbnail_photo(photo, threshold=250):
 
 
 def _is_usable_media_msg(m):
-    """هل هذي الرسالة فيها وسائط حقيقية تستاهل تُنشر؟ يستثني صور معاينة الرابط الصغيرة
-    (أفاتار حساب بمعاينة تغريدة مقتبسة) بس يبقي الصور الحقيقية حتى لو جايه من نفس آلية
-    المعاينة (زي صورة لاعب مرفقة بتغريدة أصلية)."""
     media = m.media
     if isinstance(media, (MessageMediaPhoto, MessageMediaDocument)):
         return True
@@ -257,22 +255,16 @@ def _is_usable_media_msg(m):
 
 
 def _media_payload(m):
-    """الكائن المناسب لتمريره لـ send_file — Photo الحقيقي المستخرج لو كانت الوسائط من
-    نوع معاينة رابط (MessageMediaWebPage)، أو m.media مباشرة لباقي الحالات."""
     if isinstance(m.media, MessageMediaWebPage):
         return m.photo
     return m.media
 
 
 def extract_hidden_link_urls(message, source_username=None):
-    """يرجع روابط 'مخفية' خلف نص مقنّع زي 'اضغط هنا للمشاهدة' — نص الرسالة العادي ما يحتوي
-    الرابط الحقيقي أصلاً، فبدون هذا الاستخراج يضيع الرابط بالكامل عند النشر.
-    يتجاهل رابط قناة المصدر نفسها، وأي رابط خلف نص "Read more" أو "اقرأ المزيد"
-    (رابط لمقال بموقع المصدر — مو محتوى نحتاج ننقله)."""
     if not message or not getattr(message, "entities", None):
         return []
     handle = (source_username or "").lstrip("@").lower()
-    skip_anchor_re = re.compile(r'read\s*more|اقرأ\s*المزيد', re.IGNORECASE)
+    skip_anchor_re = re.compile(r"read\s*more|اقرأ\s*المزيد", re.IGNORECASE)
     urls = []
     try:
         for entity, anchor_text in message.get_entities_text(MessageEntityTextUrl):
@@ -290,36 +282,37 @@ def extract_hidden_link_urls(message, source_username=None):
 def clean_text(text, source_username=None, strip_telegram_links=True):
     if not text:
         return ""
-    cleaned = text
-    cleaned = cleaned.replace('📊', '')
+    cleaned = text.replace("📊", "")
     if source_username:
-        cleaned = re.sub(re.escape(source_username), '', cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(re.escape(source_username), "", cleaned, flags=re.IGNORECASE)
     if strip_telegram_links:
-        # احذف أي رابط تيليجرام (قناة أو مجموعة أو دعوة انضمام) موجود بالنص — سواء قناة
-        # المصدر نفسها أو أي قناة/مجموعة ثانية يروّجلها. أي رابط خارجي غير t.me (موقع رسمي،
-        # نتائج، إلخ) يبقى كما هو ولا يُحذف
-        cleaned = re.sub(r'(https?://)?t\.me/\S+', '', cleaned, flags=re.IGNORECASE)
-    # روابط t.co (اختصار تويتر/X لمعاينة الصورة أو التغريدة الأصلية) — ما تحمل أي محتوى
-    # مفيد للقارئ العربي، تُحذف دايماً من كل القنوات
-    cleaned = re.sub(r'https?://t\.co/\S+', '', cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r'(?i)forwarded from.*', '', cleaned)
-    cleaned = re.sub(r'(?i)read\s*more\.?\s*$', '', cleaned.rstrip())
-    cleaned = re.sub(r'اقرأ\s*المزيد\.?\s*$', '', cleaned.rstrip())
-    cleaned = re.sub(r'أعيد التوجيه من.*', '', cleaned)
-    # حذف سطر التوقيع/الشكر اللي تضيفه قنوات ثانية بمنشورها (زي "نيمار ابن الانبار || @IRAQEDU")
-    # — يشتغل بكل القنوات، على أي سطر يحتوي هذا التوقيع بغض النظر عن الصيغة بالضبط
-    cleaned = re.sub(r'^.*نيمار\s*ابن\s*الانبار.*$', '', cleaned, flags=re.MULTILINE | re.IGNORECASE)
-    cleaned = re.sub(r'^.*@?IRAQEDU.*$', '', cleaned, flags=re.MULTILINE | re.IGNORECASE)
-    cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
+        cleaned = re.sub(r"(https?://)?t\.me/\S+", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"https?://t\.co/\S+", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"(?i)forwarded from.*", "", cleaned)
+    cleaned = re.sub(r"(?i)read\s*more\.?\s*$", "", cleaned.rstrip())
+    cleaned = re.sub(r"اقرأ\s*المزيد\.?\s*$", "", cleaned.rstrip())
+    cleaned = re.sub(r"أعيد التوجيه من.*", "", cleaned)
+    cleaned = re.sub(
+        r"^.*نيمار\s*ابن\s*الانبار.*$",
+        "",
+        cleaned,
+        flags=re.MULTILINE | re.IGNORECASE,
+    )
+    cleaned = re.sub(
+        r"^.*@?IRAQEDU.*$",
+        "",
+        cleaned,
+        flags=re.MULTILINE | re.IGNORECASE,
+    )
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()
 
 
 def contains_click_here_phrase(text):
-    """يفحص وجود عبارة 'اضغط هنا للمشاهدة' (وتنويعاتها) — منشورات بهذي الصيغة تُستبعد
-    بالكامل بناءً على طلب المستخدم (كثير منها طلع منشورات احتيال/تصيّد)."""
     if not text:
         return False
-    return bool(re.search(r'اضغط\s*هنا.{0,15}(للمشاهدة|لمشاهدة|مشاهدة)', text))
+    return bool(re.search(r"اضغط\s*هنا.{0,15}(للمشاهدة|لمشاهدة|مشاهدة)", text))
+
 
 # ==================== Gemini ====================
 
@@ -363,9 +356,6 @@ def call_gemini(prompt, api_key, max_retries=3):
 
 
 def call_gemini_vision(image_path, api_key, max_retries=3):
-    """يفحص صورة: هل فيها نص مكتوب (بأي لغة)؟ إذا نعم يرجع ترجمته/صياغته كتعليق عربي طبيعي.
-    يستخدم فقط عند غياب أي تعليق نصي على المنشور، عشان ما ينزل منشور صورة فاضية
-    وفيها نص أجنبي محد يفهمه القاري العربي."""
     if not api_key:
         return {"has_text": False, "caption": ""}
     try:
@@ -377,11 +367,9 @@ def call_gemini_vision(image_path, api_key, max_retries=3):
 
     ext = image_path.lower().rsplit(".", 1)[-1]
     mime = "image/png" if ext == "png" else "image/jpeg"
-
     prompt = """افحص هذه الصورة: هل يوجد عليها أي نص مكتوب (عنوان، جملة، شعار كتابي) بأي لغة؟
-- إذا يوجد نص، لخّصه وأعد صياغته كتعليق قصير طبيعي بالعربية الفصحى (وليس ترجمة حرفية)، بدون وصف الصورة نفسها.
+- إذا يوجد نص، لخّصه وأعد صياغته كتعليق قصير طبيعي بالعربية، وليس ترجمة حرفية، بدون وصف الصورة نفسها.
 - إذا لا يوجد أي نص مكتوب على الصورة إطلاقاً، اجعل has_text=false و caption فارغة.
-
 أعد النتيجة بصيغة JSON فقط: {"has_text": true/false, "caption": "النص بالعربية أو فارغ"}"""
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
@@ -405,8 +393,10 @@ def call_gemini_vision(image_path, api_key, max_retries=3):
                 if raw.lower().startswith("json"):
                     raw = raw[4:].strip()
             result = json.loads(raw)
-            return {"has_text": bool(result.get("has_text", False)),
-                    "caption": (result.get("caption") or "").strip()}
+            return {
+                "has_text": bool(result.get("has_text", False)),
+                "caption": (result.get("caption") or "").strip(),
+            }
         except Exception as e:
             if attempt < max_retries:
                 time.sleep(2 ** attempt)
@@ -420,14 +410,13 @@ def check_is_ad(text, api_key):
     prompt = f"""حدد فقط إذا كان النص التالي إعلاناً مدفوعاً أو محتوى ترويجياً تجارياً.
 اعتبره إعلاناً (is_ad=true) لو فيه أي من هذي العلامات:
 - ترويج مباشر لمنتج، تطبيق، خدمة، قناة/حساب آخر، أو رعاية مدفوعة
-- سعر، خصم، أو عرض ("سعر الاشتراك"، "بدل من"، نسبة خصم، إلخ)
+- سعر، خصم، أو عرض
 - دعوة صريحة للتسجيل أو الاشتراك أو الحجز بدورة/كورس/منتج مقابل مبلغ
-- رقم أو معرّف تواصل "للحجز" أو "للاستفسار" أو "للتواصل" بخصوص خدمة أو دورة مدفوعة
-- أسماء مدرّسين/مراكز خاصة مع ترويج لدوراتهم (حتى لو المحتوى تعليمي بالمظهر)
+- رقم أو معرّف تواصل للحجز أو الاستفسار عن خدمة أو دورة مدفوعة
+- أسماء مدرّسين/مراكز خاصة مع ترويج لدوراتهم
 
-أي خبر عادي إخباري — حتى لو ذكر جوائز، مسابقات، إعلانات رسمية من جهة حكومية، أو أحداث،
-بدون سعر أو دعوة للشراء — **ليس إعلاناً**، اعتبره is_ad=false.
-عند الشك بين خبر عادي وإعلان بدون أي من العلامات فوق، اجعل is_ad=false. لا تعدل النص إطلاقاً.
+أي خبر عادي إخباري، حتى لو ذكر جوائز أو مسابقات أو إعلانات رسمية، بدون سعر أو دعوة للشراء، ليس إعلاناً.
+عند الشك اجعل is_ad=false. لا تعدل النص إطلاقاً.
 
 النص:
 {text}
@@ -440,81 +429,91 @@ def check_is_ad(text, api_key):
         print(f"❌ خطأ فحص الإعلان: {e}")
         return False
 
+
+# ==================== الترجمة وإعادة الصياغة ====================
+
 def call_translate(text, api_key, extra_rules=None):
-    extra = f"\n{extra_rules}\n" if extra_rules else ""
-    prompt = f"""أنت كاتب عربي محترف. أعد صياغة النص التالي (بأي لغة كان مكتوب — إنجليزي، روسي، أو غيرها) بالعربية بالكامل.
-**ممنوع الترجمة الحرفية كلمة-بكلمة.** اكتبه وكأنك عربي شاهدت نفس الخبر وتكتبه لأول مرة بأسلوبك — غيّر ترتيب الجملة،
-ادمج أو افصل الجمل، واستخدم تعابير عربية طبيعية شائعة بدل نقل التراكيب الأجنبية حرفياً.
-تجاهل أي روابط أو إشارات لقناة المصدر. لا تضيف أي تعليق أو مقدمة من عندك.
-إذا كان النص إعلاناً مدفوعاً أو محتوى ترويجياً تجارياً صريحاً (منتج، تطبيق، خدمة، رعاية مدفوعة) اجعل should_post = false.
-أي خبر عادي — حتى لو ذكر جوائز أو مسابقات أو أحداث — ليس إعلاناً، انشره (should_post = true). عند الشك انشر.
+    extra = f"\nتعليمات إضافية خاصة بالقناة:\n{extra_rules}\n" if extra_rules else ""
+
+    prompt = f"""أنت محرر عربي محترف تكتب منشورات لقناة تلغرام. مهمتك نقل النص إلى العربية بصياغة طبيعية وسلسة، كما لو أن محرراً عربياً كتبه من البداية، لا أن تترجمه حرفياً.
+
+قواعد الصياغة:
+- استخدم عربية واضحة وبسيطة وحيوية، مناسبة لطبيعة النص وجمهوره. في أخبار كرة القدم استخدم المصطلحات الكروية العربية المألوفة، وفي التقنية والألعاب استخدم المصطلحات الشائعة لدى الجمهور.
+- أعد بناء الجمل وترتيبها بحرية لتحسين سلاسة العربية، مع الالتزام التام بمعنى النص الأصلي.
+- ابدأ بالمعلومة الأهم، وتجنب الحشو والتكرار والتراكيب المترجمة حرفياً.
+- حافظ على جميع الحقائق والتفاصيل المهمة، والأسماء والفرق والنتائج والأرقام والتواريخ والأسعار والاقتباسات والروابط المطلوبة ودرجة التأكيد والنفي. لا تحوّل احتمالاً إلى تأكيد، أو تفاوضاً إلى اتفاق نهائي.
+- لا تخترع معلومات أو استنتاجات أو سياقاً غير موجود، ولا تحذف تفصيلاً مهماً لمجرد الاختصار.
+- احتفظ بالإيموجي ذات المعنى وبنبرة الخبر الأصلية، بما فيها صيغة العاجل إن وُجدت، دون الإكثار من الإيموجي من عندك.
+- تجاهل روابط وإشارات حسابات المصدر غير اللازمة، ولا تضف مقدمة أو تعليقاً أو خاتمة أو هاشتاغات من عندك.
+- لا تعتبر خبراً أو تحديثاً عادياً إعلاناً لمجرد ذكر منتج أو لعبة أو شركة أو خدمة. اجعل should_post = false فقط عند وجود إعلان تجاري مدفوع أو ترويج صريح لمنتج/خدمة. عند الشك، انشره.
+- إذا كانت هناك تعليمات خاصة بالقناة أدناه، طبّقها ما دامت لا تغيّر حقائق النص الأصلي.
+- أخرج النتيجة بصيغة JSON صحيحة فقط، من دون أي نص خارج JSON.
+
+مثال على الأسلوب: بدلاً من ترجمة الجملة كلمة بكلمة، صغها بالعربية الطبيعية مع الحفاظ على المعنى نفسه.
+
 {extra}
-النص:
+النص الأصلي:
 {text}
 
-أعد النتيجة بصيغة JSON فقط: {{"should_post": true/false, "text": "الترجمة"}}"""
+أعد النتيجة بصيغة JSON فقط:
+{{"should_post": true/false, "text": "المنشور العربي النهائي"}}"""
+
     try:
         result = call_gemini(prompt, api_key)
-        return {"should_post": bool(result.get("should_post", True)),
-                "text": (result.get("text") or text).strip()}
+        return {
+            "should_post": bool(result.get("should_post", True)),
+            "text": (result.get("text") or "").strip(),
+        }
     except Exception as e:
         print(f"❌ خطأ الترجمة — لن يُنشر بلا ترجمة: {e}")
         return {"should_post": False, "text": ""}
 
+
 def call_rephrase(text, api_key, extra_rules=None):
-    extra = f"\n{extra_rules}\n" if extra_rules else ""
-    prompt = f"""أنت محرر صحفي عراقي. أعد صياغة النص التالي بأسلوب صحفي احترافي واضح ومختصر بالعربية.
-تجاهل أي روابط أو إشارات لقناة المصدر. لا تضيف أي تعليق من عندك.
-إذا كان النص إعلاناً مدفوعاً أو محتوى ترويجياً تجارياً صريحاً (منتج، تطبيق، خدمة، رعاية مدفوعة) اجعل should_post = false.
-أي خبر عادي — حتى لو ذكر جوائز أو مسابقات أو أحداث — ليس إعلاناً، انشره (should_post = true). عند الشك انشر.
+    extra = f"\nتعليمات إضافية خاصة بالقناة:\n{extra_rules}\n" if extra_rules else ""
+    prompt = f"""أنت محرر عربي محترف. أعد صياغة النص التالي ليبدو طبيعياً وسلساً وكأنه كُتب بالعربية من البداية، مع الحفاظ الكامل على المعلومات.
+
+قواعد إعادة الصياغة:
+- استخدم عربية واضحة وبسيطة وحيوية، وبأسلوب يناسب نوع المنشور والجمهور المستهدف.
+- غيّر بناء الجمل وترتيبها عند الحاجة، ولا تكتفِ باستبدال الكلمات بمرادفات.
+- حافظ على جميع الأسماء والأرقام والتواريخ والنتائج والأسعار والاقتباسات والتفاصيل المهمة، وعلى النفي ودرجة التأكيد ونسبة التصريحات إلى أصحابها.
+- لا تحوّل الشائعة إلى حقيقة، أو الاهتمام إلى مفاوضات، أو المفاوضات إلى اتفاق؛ ولا تضف استنتاجات أو معلومات من عندك.
+- لا تحذف تفاصيل مهمة ولا تختصر بما يغيّر المعنى. تجنّب الحشو والتكرار واللغة المتكلّفة.
+- تجاهل روابط وإشارات حسابات المصدر غير الضرورية، ولا تضف مقدمة أو خاتمة أو تعليقاً أو هاشتاغات من عندك.
+- لا تعتبر خبراً عادياً إعلاناً. اجعل should_post = false فقط للإعلان التجاري المدفوع أو الترويج الصريح لمنتج/خدمة؛ وعند الشك انشره.
+- طبّق تعليمات القناة الإضافية أدناه دون تغيير حقائق النص.
+- أخرج JSON صحيحاً فقط، ولا تكتب أي شيء خارجه.
+
 {extra}
-النص:
+النص الأصلي:
 {text}
 
-أعد النتيجة بصيغة JSON فقط: {{"should_post": true/false, "text": "النص المعاد صياغته"}}"""
+أعد النتيجة بصيغة JSON فقط:
+{{"should_post": true/false, "text": "النص المعاد صياغته"}}"""
     try:
         result = call_gemini(prompt, api_key)
-        return {"should_post": bool(result.get("should_post", True)),
-                "text": (result.get("text") or text).strip()}
+        return {
+            "should_post": bool(result.get("should_post", True)),
+            "text": (result.get("text") or text).strip(),
+        }
     except Exception as e:
         print(f"❌ خطأ إعادة الصياغة: {e}")
         return {"should_post": True, "text": text}
 
+
 def call_match_links(text, api_key):
     prompt = f"""أنت تنسّق منشورات قناة تبث روابط مشاهدة مباريات كرة القدم. حوّل النص التالي لنفس القالب بالضبط:
 
-- احذف أي "تمديد" أو تكرار حروف بأسماء الفرق (زي "فـ ـرنـ ـسـ ـا") — اكتب الاسم عادي بدون فواصل (زي "فرنسا").
-- سطر كل مباراة: "اسم_الفريق × اسم_الفريق" بدون أي إيموجي إطلاقاً (بدون أعلام دول، بدون ⚽️، بدون 🆚 — استخدم علامة × فقط).
-- سطر الوقت: "⏰ | الساعة مساءً بتوقيت مكة المكرمة" (اكتب "مكة المكرمة" نص صريح، بدون علم وبدون كلمة "الـ").
-- سطر المعلّق: "🎤 | الاسم" (بدون تمديد حروف بالاسم).
-- افصل بين كل مباراة والثانية بسطر فاضي.
-- بعد آخر مباراة، سطر فاضي ثم سطر رابط الدعوة: إذا كانت مباراة واحدة بس بكل المنشور اكتب "🔗 | رابط المباراة:"،
-  وإذا كانت أكثر من مباراة اكتب "🔗 | رابط المباريات:" — ثم رابط الدعوة (https://t.me/+...) بسطر لحاله.
-- بعده سطر فاضي ثم (بدون أي إيموجي بالبداية): "ملاحظة: اضغط على الرابط ثم «انضمام»، وبعدها اضغط مرة أخرى على الرابط للدخول 💎"
-  (إيموجي 💎 بالنهاية يبقى، بس احذف أي إيموجي كان بأول السطر زي ⬇️).
-- لا تحذف أي مباراة. لا تضف أي تعليق من عندك.
+- احذف تمديد الحروف من أسماء الفرق واكتب الأسماء بصورة عادية.
+- سطر كل مباراة: "اسم_الفريق × اسم_الفريق" بدون أي إيموجي إطلاقاً.
+- سطر الوقت: "⏰ | الساعة مساءً بتوقيت مكة المكرمة".
+- سطر المعلّق: "🎤 | الاسم".
+- افصل بين كل مباراة والثانية بسطر فارغ.
+- بعد آخر مباراة، سطر فارغ ثم سطر رابط الدعوة: إذا كانت مباراة واحدة اكتب "🔗 | رابط المباراة:"، وإذا كانت أكثر من مباراة اكتب "🔗 | رابط المباريات:" ثم رابط الدعوة بسطر لحاله.
+- بعده سطر فارغ ثم: "ملاحظة: اضغط على الرابط ثم «انضمام»، وبعدها اضغط مرة أخرى على الرابط للدخول 💎"
+- لا تحذف أي مباراة ولا تضف أي تعليق من عندك.
 
-مثال المدخل (مباراة واحدة):
-🇬🇧 تشيلسي 🆚 بورنموث 🏴󠁧󠁢󠁥󠁮󠁧󠁿
-⏰ | 5:00 مساءً بتوقيت 🇸🇦
-🎤 | علي محمد علي
-
-🔗 | رابط المباريات:
-https://t.me/+5hBOma9vTGo4MWRk
-
-⬇️ | ملاحظة: اضغط على الرابط ثم «انضمام»، وبعدها اضغط مرة أخرى على الرابط للدخول 💎
-
-مثال المخرج المطلوب بالضبط:
-تشيلسي × بورنموث
-⏰ | 5:00 مساءً بتوقيت مكة المكرمة
-🎤 | علي محمد علي
-
-🔗 | رابط المباراة:
-https://t.me/+5hBOma9vTGo4MWRk
-
-ملاحظة: اضغط على الرابط ثم «انضمام»، وبعدها اضغط مرة أخرى على الرابط للدخول 💎
-
-النص المطلوب تنسيقه الآن:
+النص المطلوب تنسيقه:
 {text}
 
 أعد النتيجة بصيغة JSON فقط: {{"text": "النص بعد الترتيب بنفس القالب أعلاه بالضبط"}}"""
@@ -527,47 +526,43 @@ https://t.me/+5hBOma9vTGo4MWRk
 
 
 def call_fabrizio(text, api_key):
-    prompt = f"""أنت محرر لصفحة عربية تنقل كل منشورات حساب فابريزيو رومانو الرسمي بالعربية.
+    prompt = f"""أنت محرر أخبار كرة قدم وانتقالات لقناة تلغرام عربية. حوّل النص إلى منشور عربي طبيعي وواضح، كأن محرراً رياضياً عربياً كتبه من البداية، لا كترجمة حرفية.
 
-معايير النشر:
-- انشر كل منشور يصلك (should_post = true) بلا استثناء — انتقالات، صفقات، تجديد عقود، تغطية مباراة،
-  إحصائيات، تصريحات، فيديوهات، أو أي خبر آخر مهما كان صغيراً أو هامشياً.
-- الاستثناء الوحيد: إذا كان النص إعلاناً مدفوعاً أو محتوى ترويجياً تجارياً صريحاً (منتج، تطبيق، خدمة،
-  رعاية مدفوعة) — عندها فقط اجعل should_post = false. أي خبر رياضي حقيقي ليس إعلاناً.
-- استثناء ثاني: منشورات الترويج لبودكاست/برنامج فابريزيو نفسه (زي "New pod on"، ترويج لحلقة
-  يوتيوب/بودكاست، دعوة للاستماع) تُعتبر ترويج ذاتي لمحتواه مو خبر مباشر — اجعلها should_post = false،
-  حتى لو ذكرت أسماء لاعبين بشكل عابر ("talks"، "more to follow" بدون تفاصيل فعلية).
-- استثناء ثالث: منشورات اللي جوهرها مقطع فيديو قصير مرفق من تويتر/X (لقطة، تكريم، هايلايت، "Watch:")
-  وما فيها خبر مكتوب فعلي غير جملة قصيرة وصفية — اجعلها should_post = false. السبب: الفيديو المرفق
-  عبارة عن معاينة رابط من X مو ملف تيليجرام حقيقي، والبوت ما يقدر ينشره، فينزل منشور فاضي بلا فائدة.
-- أي منشور يحتوي على عبارة "Here we go" يُنشر دائماً بلا استثناء (حتى لو جاء ضمن منشور بودكاست أو فيديو).
+قرار النشر:
+- انشر الأخبار الرياضية الفعلية، بما فيها الانتقالات والمفاوضات وتجديد العقود والتصريحات والإحصائيات والأخبار الصغيرة.
+- استبعد الإعلانات التجارية المدفوعة فقط، وكذلك الترويج لبودكاست أو برنامج فابريزيو نفسه إذا لم يتضمن خبراً فعلياً.
+- استبعد مقاطع الفيديو القصيرة التي لا تحمل خبراً مفيداً إذا كان محتواها الأساسي غير قابل للنقل من النص.
+- إذا وردت عبارة "Here we go"، انشر المنشور دائماً بلا استثناء.
 
-الترجمة (فقط إذا should_post = true):
-- **ممنوع الترجمة الحرفية كلمة-بكلمة.** أعد صياغة الخبر بالكامل بأسلوب محرر رياضي عربي محترف
-  (زي أسلوب مواقع كووورة أو beIN SPORTS)، كأن الخبر كُتب أصلاً بالعربي وليس مترجماً.
-  غيّر ترتيب الجملة، ادمج أو افصل الجمل، واستخدم تعابير رياضية عربية شائعة (زي "أكد مصدر مقرب"،
-  "من المنتظر أن"، "بات قاب قوسين من") بدل الترجمة المباشرة للتراكيب الإنجليزية.
-- أبقِ عبارة "Here we go" بالإنجليزية كما هي حرفياً بدون ترجمة إذا وردت بالنص.
-- إذا ورد بالنص ذكر لفيديو على يوتيوب مع رابطه (يبدأ بـ youtube.com أو youtu.be)، أبقِ رابط اليوتيوب
-  هذا بالضبط كما هو حرفياً داخل النص المترجم — لا تحذفه ولا تغيّره.
-- احذف أي رابط أو إشارة لقناة المصدر نفسها (بما فيها روابط تويتر/X وإشارات "Fabrizio Romano on X")
-  — غير رابط اليوتيوب المذكور فوق، هذا يبقى.
-  لا تضيف تعليقات من عندك.
+أسلوب التحرير:
+- استخدم عربية بسيطة وحيوية ومصطلحات كروية مألوفة، وابدأ بأهم معلومة.
+- أعد بناء الجمل لتبدو عربية طبيعية، وتجنب النقل الحرفي والحشو والمبالغة.
+- حافظ على أسماء اللاعبين والأندية والأرقام والمبالغ والتواريخ والاقتباسات وكل التفاصيل المهمة.
+- حافظ بدقة على حالة الصفقة: اهتمام أولي، أو مفاوضات، أو اتفاق، أو توقيع رسمي. لا تجعل الخبر أكثر تأكيداً مما يقوله المصدر.
+- أبقِ عبارة "Here we go" بالإنجليزية كما هي تماماً إذا وردت في النص.
+- احتفظ بروابط YouTube التي تبدأ بـ youtube.com أو youtu.be كما هي حرفياً.
+- احذف روابط وإشارات حساب فابريزيو رومانو على تويتر/X، باستثناء رابط يوتيوب المذكور.
+- لا تضف معلومات أو تحليلات أو تعليقات أو هاشتاغات من عندك.
+- أخرج JSON صحيحاً فقط دون أي نص خارجه.
 
-النص:
+النص الأصلي:
 {text}
 
-أعد النتيجة بصيغة JSON فقط: {{"should_post": true/false, "text": "النص المُعالج"}}"""
+أعد النتيجة بصيغة JSON فقط:
+{{"should_post": true/false, "text": "المنشور العربي النهائي"}}"""
+
     try:
         result = call_gemini(prompt, api_key)
-        return {"should_post": bool(result.get("should_post", True)),
-                "text": (result.get("text") or text).strip()}
+        return {
+            "should_post": bool(result.get("should_post", True)),
+            "text": (result.get("text") or text).strip(),
+        }
     except Exception as e:
         print(f"❌ خطأ معالجة فابريزيو — لن يُنشر بلا ترجمة: {e}")
         return {"should_post": False, "text": ""}
 
+
 async def apply_processing(config, text):
-    """يرجع (should_post, final_text)."""
     mode = config["mode"]
     if not text:
         return True, ""
@@ -593,14 +588,15 @@ async def apply_processing(config, text):
         return result["should_post"], result["text"]
 
     if mode == "fabrizio_special":
-        force_post = bool(re.search(r'here\s*we\s*go', text, re.IGNORECASE))
+        force_post = bool(re.search(r"here\s*we\s*go", text, re.IGNORECASE))
         result = call_fabrizio(text, config["gemini_key"])
         should_post = bool(result["text"]) and (result["should_post"] or force_post)
         return should_post, result["text"]
 
     return True, text
 
-# ==================== معالجة ونشر دفعة رسائل (منشور مفرد أو ألبوم) ====================
+
+# ==================== معالجة ونشر دفعة رسائل ====================
 
 async def process_batch(source_id, messages):
     config = CHANNELS.get(source_id)
@@ -620,37 +616,34 @@ async def process_batch(source_id, messages):
         return
 
     if contains_click_here_phrase(raw_text):
-        print(f"⏭️  تم تجاهل منشور — {config['name']} (يحتوي 'اضغط هنا للمشاهدة' — يُستبعد دائماً)")
+        print(f"⏭️ تم تجاهل منشور — {config['name']} (يحتوي 'اضغط هنا للمشاهدة')")
         return
 
     hidden_links = extract_hidden_link_urls(text_msg, config.get("source_username"))
     if hidden_links:
-        # الرابط الحقيقي كان مخفي خلف نص زي "اضغط هنا" — نضيفه كنص ظاهر حتى ما يضيع
         raw_text = (raw_text.rstrip() + "\n\n" + "\n".join(hidden_links)) if raw_text else "\n".join(hidden_links)
 
     strip_tg_links = config["mode"] != "match_links"
-    cleaned = clean_text(raw_text, config.get("source_username"), strip_telegram_links=strip_tg_links)
+    cleaned = clean_text(
+        raw_text,
+        config.get("source_username"),
+        strip_telegram_links=strip_tg_links,
+    )
     should_post, final_text = await apply_processing(config, cleaned)
 
     if not should_post:
-        print(f"⏭️  تم تجاهل منشور — {config['name']} (إعلان أو غير مهم، أو خطأ تقني بالمعالجة — راجع الأسطر فوق)")
+        print(f"⏭️ تم تجاهل منشور — {config['name']} (إعلان أو غير مهم أو خطأ تقني)")
         return
 
-    # نتحقق من نوع الوسائط الفعلي (MessageMediaPhoto/Document حقيقي) بدل الخاصية العامة
-    # m.photo/m.video، لأن تيليثون أحياناً يرجّع صورة "معاينة الرابط" (thumbnail لمعاينة
-    # تغريدة مقتبسة) على إنها صورة حقيقية بالمنشور — وهذا يخلي البوت ينشرها غلط وكأنها محتوى.
     media_msgs = [m for m in messages if _is_usable_media_msg(m)]
 
     if config.get("skip_if_video") and any(m.video for m in media_msgs):
-        force_post = bool(re.search(r'here\s*we\s*go', raw_text, re.IGNORECASE))
+        force_post = bool(re.search(r"here\s*we\s*go", raw_text, re.IGNORECASE))
         if not force_post:
-            print(f"⏭️  تم تجاهل منشور — {config['name']} (يحتوي فيديو حقيقي مرفق — يُستبعد دائماً بهذي القناة)")
+            print(f"⏭️ تم تجاهل منشور — {config['name']} (يحتوي فيديو مرفق)")
             return
 
-    # فحص نص الصورة بالذكاء الاصطناعي (فقط عند غياب أي تعليق، بوضع ترجمة/إعادة صياغة)
-    # هذا يحتاج تحميل صورة واحدة صغيرة فقط — الفيديوهات/الملفات ما تُحمَّل إطلاقاً (انظر تحت)
-    if (not final_text.strip()
-            and config["mode"] in ("translate_en_ar", "rephrase_ar")):
+    if not final_text.strip() and config["mode"] in ("translate_en_ar", "rephrase_ar"):
         first_photo_msg = next((m for m in media_msgs if m.photo), None)
         if first_photo_msg:
             tmp_path = None
@@ -676,19 +669,20 @@ async def process_batch(source_id, messages):
     published = False
     try:
         if media_msgs:
-            # نرسل الوسائط بالإشارة المباشرة لملفها على سيرفرات تلجرام — بدون تحميل
-            # أو إعادة رفع محلياً. هذا يشتغل حتى لفيديوهات/ملفات بأحجام كبيرة جداً
-            # (جيجابايتات) بدون ما يمر أي بايت عبر GitHub Actions، وتلقائياً ما يظهر
-            # اسم/قناة المرسل الأصلي لأنها رسالة جديدة مو Forward.
-            to_send = _media_payload(media_msgs[0]) if len(media_msgs) == 1 else [_media_payload(m) for m in media_msgs]
+            to_send = (
+                _media_payload(media_msgs[0])
+                if len(media_msgs) == 1
+                else [_media_payload(m) for m in media_msgs]
+            )
             try:
-                await client.send_file(config["target"], to_send,
-                                        caption=final_text or None, parse_mode="html")
+                await client.send_file(
+                    config["target"], to_send,
+                    caption=final_text or None, parse_mode="html",
+                )
                 published = True
                 print(f"✅ نُشر (وسائط) — {config['name']}")
             except Exception as e:
                 print(f"⚠️ فشل النسخ المباشر، محاولة تحميل احتياطي — {config['name']}: {e}")
-                # احتياط نادر: لو فشلت الإشارة المباشرة (مثلاً ملف قديم جداً)، جرّب تحميل حقيقي
                 files = []
                 for m in media_msgs:
                     try:
@@ -699,8 +693,10 @@ async def process_batch(source_id, messages):
                         print(f"⚠️ فشل التحميل الاحتياطي لملف — {config['name']}: {e2}")
                 if files:
                     to_send2 = files[0] if len(files) == 1 else files
-                    await client.send_file(config["target"], to_send2,
-                                            caption=final_text or None, parse_mode="html")
+                    await client.send_file(
+                        config["target"], to_send2,
+                        caption=final_text or None, parse_mode="html",
+                    )
                     for f in files:
                         try:
                             os.remove(f)
@@ -709,15 +705,19 @@ async def process_batch(source_id, messages):
                     published = True
                     print(f"✅ نُشر (وسائط، تحميل احتياطي) — {config['name']}")
                 elif final_text:
-                    await client.send_message(config["target"], final_text,
-                                               parse_mode="html", link_preview=False)
+                    await client.send_message(
+                        config["target"], final_text,
+                        parse_mode="html", link_preview=False,
+                    )
                     published = True
                     print(f"⚠️ نُشر نص فقط (فشل النسخ والتحميل) — {config['name']}")
                 else:
                     print(f"❌ تم تجاهل منشور — فشل كل محاولات نشر الوسائط — {config['name']}")
         elif final_text:
-            await client.send_message(config["target"], final_text,
-                                       parse_mode="html", link_preview=False)
+            await client.send_message(
+                config["target"], final_text,
+                parse_mode="html", link_preview=False,
+            )
             published = True
             print(f"✅ نُشر (نص) — {config['name']}")
     except Exception as e:
@@ -726,14 +726,12 @@ async def process_batch(source_id, messages):
     if published:
         record_published_content(source_id, messages, raw_text)
 
-# ==================== معالجة الرسائل الفائتة (بولينغ) ====================
+
+# ==================== معالجة الرسائل الفائتة (Polling) ====================
 
 async def catch_up_channel(source_id):
     config = CHANNELS.get(source_id, {})
-    # استخدم اليوزرنيم العام إذا موجود — يتحل حتى لو الحساب مو منضم للقناة.
-    # الـ ID الرقمي وحده يفشل أحياناً لو الحساب ما "شاف" القناة من قبل (access_hash غير محفوظ).
     entity_ref = config.get("source_username") or source_id
-
     key = str(source_id)
     last_id = state.get(key, 0)
 
@@ -748,7 +746,7 @@ async def catch_up_channel(source_id):
     if not messages:
         return
 
-    messages = list(reversed(messages))  # من الأقدم للأحدث
+    messages = list(reversed(messages))
     i = 0
     while i < len(messages):
         msg = messages[i]
@@ -765,13 +763,12 @@ async def catch_up_channel(source_id):
         state[key] = new_last
         save_state(state)
 
+
 # ==================== التشغيل الرئيسي ====================
-# تشغيلة واحدة قصيرة: تتصل، تفحص كل قناة مرة واحدة، تحفظ الحالة، وتطفي.
-# لا يوجد أي استماع مباشر أو حلقة انتظار — هذا هو الفرق الجوهري عن النسخة السابقة.
 
 async def main():
     await client.start()
-    print("🚀 بدء فحص القنوات الثمانية (بولينغ)...")
+    print("🚀 بدء فحص القنوات (Polling)...")
 
     for source_id, cfg in CHANNELS.items():
         print(f"⏳ فحص — {cfg['name']}")
@@ -783,6 +780,7 @@ async def main():
     await client.disconnect()
     commit_state()
     print("✅ انتهت التشغيلة — الاتصال مقفول.")
+
 
 if __name__ == "__main__":
     asyncio.run(main())
