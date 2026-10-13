@@ -1,787 +1,402 @@
-# -*- coding: utf-8 -*-
-"""
-بوت الريلي الموحد — حساب شخصي واحد (Telethon) يفحص 8 قنوات مصدر كل تشغيل
-(بولينغ، بدون استماع مباشر مستمر) وينشر الجديد بـ 8 قنوات هدف.
-
-الفرق عن النسخة السابقة: هذه النسخة لا تفتح اتصال طويل الأمد ولا تستخدم
-events.NewMessage. كل تشغيلة تفحص الرسائل الفائتة فقط ثم تُغلق الاتصال —
-مصمم ليُستدعى بشكل متكرر (مثلاً كل 5 دقائق) عبر GitHub Actions cron،
-بدون مخالفة سياسة الاستخدام المقبول لـ GitHub (ممنوع تشغيل عمليات طويلة/
-مستمرة عبر Actions كأنها خادم دائم).
-"""
-
 import os
 import re
+import sys
 import json
-import hashlib
-import time
 import asyncio
-import subprocess
-
+import time
+import hashlib
+import requests
 from telethon import TelegramClient
 from telethon.sessions import StringSession
-from telethon.tl.types import (MessageEntityTextUrl, MessageMediaPhoto,
-                                MessageMediaDocument, MessageMediaWebPage)
-import requests
+from telethon.tl.types import MessageMediaWebPage, MessageMediaPhoto
 
-# ==================== الإعدادات العامة ====================
-
-TG_API_ID = int(os.getenv("TG_API_ID"))
-TG_API_HASH = os.getenv("TG_API_HASH")
-TG_SESSION = os.getenv("TG_SESSION")
-
-GEMINI_KEY_FABRIZ = os.getenv("GEMINI_KEY_FABRIZ")
-GEMINI_KEY_TECH = os.getenv("GEMINI_KEY_TECH")
-GEMINI_KEY_GTA = os.getenv("GEMINI_KEY_GTA")
-GEMINI_KEY_GENERAL = os.getenv("GEMINI_KEY_GENERAL")
-GEMINI_KEY_SHAKO = os.getenv("GEMINI_KEY_SHAKO")
-GEMINI_KEY_MEDIA = os.getenv("GEMINI_KEY_MEDIA")
-GEMINI_KEY_AFLAM = os.getenv("GEMINI_KEY_AFLAM")
-GEMINI_KEY_HADAF = os.getenv("GEMINI_KEY_HADAF")
-
-GEMINI_MODEL = "gemini-flash-lite-latest"
-
-STATE_FILE = "relay_state.json"
-DOWNLOAD_DIR = "downloads"
-
-os.makedirs(DOWNLOAD_DIR, exist_ok=True)
-
-# ==================== إعدادات القنوات الثمانية ====================
-# mode:
-#   "copy"            -> نشر كما هو (بعد تنظيف الروابط) + فحص إعلانات فقط
-#   "translate_en_ar"  -> ترجمة انجليزي -> عربي طبيعي + فحص إعلانات
-#   "rephrase_ar"      -> إعادة صياغة صحفية بالعربي + فحص إعلانات
-#   "fabrizio_special" -> نفس الترجمة لكن بمعايير نشر خاصة بفابريزيو
-
-CHANNELS = {
-    -1001344466508: {
-        "name": "فابريزيو رومانو بالعربي",
-        "target": -1002015818715,
-        "mode": "fabrizio_special",
-        "gemini_key": GEMINI_KEY_FABRIZ,
-        "source_username": "@FabrizioRomanoTG",
-        "skip_if_video": True,
-    },
-    -1009003922420: {
-        "name": "سعر الدولار في العراق",
-        "target": "@DollarIraq24",
-        "mode": "rephrase_ar",
-        "gemini_key": GEMINI_KEY_AFLAM,
-        "source_username": "@dollariraqi",
-        "add_link": True,
-        "link": "@DollarIraq24",
-        "extra_rules": "هذا منشور عن أسعار صرف الدولار والعملات. أعد صياغته بصورة مبسطة ومختصرة وواضحة "
-                       "(سطر لكل سعر أو مدينة/سوق مثلاً)، لكن **لا تحذف أي سعر أو رقم أو مدينة أو معلومة**؛ "
-                       "فقط بسّط الصياغة واحذف الزخرفة والتكرار. أبقِ الأرقام كما هي بدقة. "
-                       "احذف أي ذكر أو يوزر أو رابط لقناة المصدر.",
-    },
-    -1001565832101: {
-        "name": "شكو ماكو بـ كركوك",
-        "target": -1001812867607,
-        "mode": "rephrase_ar",
-        "gemini_key": GEMINI_KEY_SHAKO,
-        "source_username": "@kirkukdiary",
-        "add_link": True,
-        "link": "https://t.me/ShakoMakoKirkuk",
-    },
-    -1009001498075: {
-        "name": "الذكاء الاصطناعي",
-        "target": "@AInewsAR1",
-        "mode": "translate_en_ar",
-        "gemini_key": GEMINI_KEY_TECH,
-        "source_username": "@aipost",
-        "add_link": True,
-        "link": "@AInewsAR1",
-    },
-    -1009001073232: {
-        "name": "العراق الآن",
-        "target": "@IQNowNews",
-        "mode": "copy",
-        "gemini_key": GEMINI_KEY_GENERAL,
-        "source_username": "@RN24_IQ",
-        "add_link": True,
-        "link": "https://t.me/IQNowNews",
-    },
-    -1004443585067: {
-        "name": "اهداف المباريات",
-        "target": -1001877383586,
-        "mode": "copy",
-        "gemini_key": GEMINI_KEY_HADAF,
-        "source_username": "@nar0015",
-        "add_link": True,
-        "link": "https://t.me/FabriAr3",
-    },
-    -1001530089992: {
-        "name": "مكتبة الطالب العراقي",
-        "target": -1001743729724,
-        "mode": "copy",
-        "gemini_key": GEMINI_KEY_MEDIA,
-        "source_username": "@eduiq23",
-        "add_link": True,
-        "link": "https://t.me/TalibLib",
-    },
-    -1009003946451: {
-        "name": "تسريبات GTA 6",
-        "target": -1002218686576,
-        "mode": "translate_en_ar",
-        "gemini_key": GEMINI_KEY_GTA,
-        "source_username": "@GTA6NewsEN",
-        "add_link": True,
-        "link": "@GTA6AR",
-        "extra_rules": "إذا ورد أي سعر بالروبل الروسي بالنص، حوّله لمكافئه التقريبي بالدولار الأمريكي "
-                       "واكتبه بالدولار فقط بدل الروبل (استخدم تقريب تقريبي لسعر الصرف الحالي، وأشر أنه تقريبي "
-                       "بكلمة \"حوالي\"). لا تكتب الروبل إطلاقاً بالنص النهائي.",
-    },
-    -1009917651232: {
-        "name": "بثوث المباريات",
-        "target": "@FabriAr2",
-        "mode": "match_links",
-        "gemini_key": GEMINI_KEY_GENERAL,
-        "source_username": "@Arena8x",
-        # بدون add_link عمداً — ما نضيف رابط قناتنا بهذي القناة
+# ============ الإعدادات ============
+# المفتاح الداخلي (مثل "fabrizio") يتتبع حالة النشر. لو غيّرت المصدر غيّر المفتاح.
+# لإضافة صفحة ثانية: انسخ كتلة وغيّر المصدر وأسماء الأسرار (FB_PAGE_ID_2 ...).
+PAGES = {
+    "fabrizio": {
+        "source": "FabrizioRomanoTG",          # يوزرنيم القناة العامة بدون @
+        "page_id_env": "FB_PAGE_ID_1",
+        "token_env": "FB_PAGE_TOKEN_1",
+        "mode": "translate_ar",                # translate_ar | rephrase_ar | copy
+        "skip_podcast": True,
+        "skip_rt": True,               # يتخطى الريتويت (RT @...)
+        "skip_preview_video": True,    # يتخطى معاينات فيديو X
+        "min_letters": 15,             # يتخطى منشورات المعاينة اللي نصها فاضي تقريباً (اسم + ايموجي)
     },
 }
 
-client = TelegramClient(StringSession(TG_SESSION), TG_API_ID, TG_API_HASH)
+STATE_FILE = "state.json"
+FIRST_RUN_COUNT = 5
+FETCH_LIMIT = 40
+GRAPH = "https://graph.facebook.com/v21.0"
+# الأرخص أولاً (الترجمة بسيطة). لو انتهت حصته أو ما توفر ينتقل للي بعده (لكل موديل حصة مستقلة)
+GEMINI_MODELS = ["gemini-flash-lite-latest", "gemini-flash-latest"]
 
-# ==================== الحالة (last_id لكل قناة) ====================
+# نص يضاف بنهاية كل منشور + أول تعليق بعد النشر
+FOOTER = (
+    "----------------------\n"
+    "يمكنكم متابعة الاخبار لحظة بلحظة عبر قناتنا على التلكرام\n"
+    "رابط القناة في اول تعليق"
+)
+FIRST_COMMENT = "رابط قناة التلكرام 👇\nhttps://t.me/FabriAr1"
 
+PROMPTS = {
+    "translate_ar": """ترجم خبر كرة القدم التالي إلى العربية بأسلوب طبيعي كأن كاتباً عربياً كتبه (ليس حرفياً).
+- حافظ على تقسيم الأسطر.
+- بدون هاشتاغات، وبدون روابط أو إشارات لحسابات.
+- إذا كان إعلاناً أو ترويجاً (سعر، خصم، اشتراك، رعاية، كود خصم، رابط شراء) أجب SKIP فقط. وعند الشك انشره.
+- أجب بالنص النهائي فقط.
+
+النص:
+""",
+    "rephrase_ar": """أعد صياغة الخبر التالي بالعربية بأسلوب صحفي طبيعي مع الحفاظ على كل الأرقام والتفاصيل.
+- إذا كان إعلاناً أو ترويجاً مدفوعاً أجب بكلمة SKIP فقط، وعند الشك انشره.
+- أجب بالنص النهائي فقط.
+
+النص الأصلي:
+""",
+}
+
+
+def need(name):
+    v = os.environ.get(name, "").strip()
+    if not v:
+        print(f"[ERROR] secret missing or empty: {name} — check the exact name in Settings > Secrets and the env block in run.yml")
+        sys.exit(1)
+    return v
+
+
+# ============ الحالة ============
 def load_state():
     if os.path.exists(STATE_FILE):
-        try:
-            with open(STATE_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return {}
+        with open(STATE_FILE) as f:
+            return json.load(f)
     return {}
 
+
 def save_state(state):
-    with open(STATE_FILE, "w", encoding="utf-8") as f:
-        json.dump(state, f, ensure_ascii=False, indent=2)
-
-state = load_state()
-
-# منع تكرار المحتوى المتطابق في قناة مكتبة الطالب العراقي فقط.
-# يحتفظ بالبصمات لمدة 72 ساعة، ولا يغيّر سلوك بقية القنوات.
-STUDENT_LIBRARY_SOURCE_ID = -1001530089992
-STUDENT_LIBRARY_DEDUPE_SECONDS = 72 * 60 * 60
+    with open(STATE_FILE, "w") as f:
+        json.dump(state, f)
 
 
-def _batch_fingerprint(messages):
-    """بصمة للنص ومعرّفات الوسائط حتى نكتشف إعادة نشر المحتوى نفسه بمعرّف رسالة مختلف."""
-    parts = []
-    for message in messages:
-        text_part = (getattr(message, "message", None) or "").strip()
-        if text_part:
-            parts.append("text:" + re.sub(r"\s+", " ", text_part).casefold())
-        media = getattr(message, "media", None)
-        photo = getattr(media, "photo", None)
-        document = getattr(media, "document", None)
-        media_id = getattr(photo, "id", None) or getattr(document, "id", None)
-        if media_id is not None:
-            parts.append(f"media:{media_id}")
-    if not parts:
-        return None
-    payload = "\n".join(parts).encode("utf-8", errors="ignore")
-    return hashlib.sha256(payload).hexdigest()
+def h(text):
+    # نحسب الهاش على نص المصدر الخام وليس على ناتج الذكاء الاصطناعي
+    return hashlib.sha1(text.strip().encode()).hexdigest()
 
 
-def _student_library_is_duplicate(messages):
-    fingerprint = _batch_fingerprint(messages)
-    if not fingerprint:
+# ============ التنظيف على مستوى الكود ============
+def strip_hashtags(t):
+    t = re.sub(r"(?<!\S)#[^\s#]+", "", t or "")
+    t = re.sub(r"[ \t]+\n", "\n", t)
+    t = re.sub(r"[ \t]{2,}", " ", t)
+    t = re.sub(r"\n{3,}", "\n\n", t)
+    return t.strip()
+
+
+def clean_text(text, source):
+    t = text or ""
+    # توقيع التغريدة: "— Fabrizio Romano (@FabrizioRomano)" + سطر التاريخ
+    t = re.sub(r"[—–-]\s*Fabrizio Romano\s*\(@FabrizioRomano\)\s*(?:[A-Z][a-z]{2,8}\.? \d{1,2}, \d{4})?", "", t)
+    t = re.sub(r"https?://t\.co/\S+", "", t)
+    t = re.sub(r"https?://(www\.)?(t\.me|telegram\.me)/\S+", "", t)
+    t = re.sub(r"@Sabereen_Social", "", t, flags=re.I)
+    t = re.sub(r"@" + re.escape(source) + r"\b", "", t, flags=re.I)
+    t = re.sub(r"[ \t]+\n", "\n", t)
+    t = re.sub(r"\n{3,}", "\n\n", t)
+    return strip_hashtags(t)
+
+
+def is_rt(text):
+    return bool(re.match(r"\s*RT\s+@", text or "", re.I))
+
+
+def letters_count(text):
+    t = re.sub(r"@\w+", "", text or "")
+    t = re.sub(r"https?://\S+", "", t)
+    return len(re.findall(r"[^\W\d_]", t))
+
+
+def preview_is_video(wp):
+    if wp is None:
         return False
-    now = int(time.time())
-    key = f"dedupe:{STUDENT_LIBRARY_SOURCE_ID}"
-    recent = [item for item in state.get(key, [])
-              if now - int(item.get("time", 0)) <= STUDENT_LIBRARY_DEDUPE_SECONDS]
-    state[key] = recent
-    return any(item.get("hash") == fingerprint for item in recent)
+    t = (getattr(wp, "type", "") or "").lower()
+    return t in ("video", "gif") or bool(getattr(wp, "duration", None)) or bool(getattr(wp, "embed_url", None))
 
 
-def _remember_student_library_post(messages):
-    fingerprint = _batch_fingerprint(messages)
-    if not fingerprint:
-        return
-    now = int(time.time())
-    key = f"dedupe:{STUDENT_LIBRARY_SOURCE_ID}"
-    recent = [item for item in state.get(key, [])
-              if now - int(item.get("time", 0)) <= STUDENT_LIBRARY_DEDUPE_SECONDS]
-    recent.append({"hash": fingerprint, "time": now})
-    # سقف احتياطي لحجم ملف الحالة
-    state[key] = recent[-500:]
-    save_state(state)
+def is_podcast_promo(text):
+    t = text.lower()
+    return bool(re.match(r"\s*new pod", t)) and "here we go" not in t
 
 
-def commit_state():
-    """يحفظ relay_state.json على GitHub — يُستدعى مرة واحدة بنهاية كل تشغيلة."""
-    try:
-        subprocess.run(["git", "add", STATE_FILE], check=False)
-        subprocess.run(["git", "commit", "-m", "update relay state"], check=False,
-                        capture_output=True)
-        subprocess.run(["git", "pull", "--rebase", "origin", "main"], check=False,
-                        capture_output=True)
-        subprocess.run(["git", "push"], check=False, capture_output=True)
-    except Exception as e:
-        print(f"⚠️ git commit error: {e}")
-
-# ==================== تنظيف النص ====================
-
-def _is_small_thumbnail_photo(photo, threshold=250):
-    """يحدد إذا كانت الصورة 'مصغّرة' (زي أفاتار حساب بمعاينة تغريدة مقتبسة) بدل صورة محتوى
-    حقيقية — بفحص أبعادها الفعلية. أي بُعد أكبر من threshold بكسل يُعتبر صورة محتوى حقيقية."""
-    try:
-        dims = [(getattr(s, "w", 0), getattr(s, "h", 0)) for s in photo.sizes if hasattr(s, "w")]
-        if not dims:
-            return False  # ما نقدر نتأكد من الحجم — الأسلم نعتبرها صورة حقيقية
-        max_w = max(w for w, _ in dims)
-        max_h = max(h for _, h in dims)
-        return max_w < threshold and max_h < threshold
-    except Exception:
-        return False
+def enforce_here_we_go(raw, out):
+    # القاعدة تنفذ بالكود: "هير وي كو" فقط لو النص الأصلي فيه Here We Go حرفياً
+    has = "here we go" in raw.lower()
+    out = re.sub(r"^\s*هير\s*وي\s*(كو|غو)\s*", "", out)
+    if has:
+        out = "هير وي كو" + out
+    return out
 
 
-def _is_usable_media_msg(m):
-    """هل هذي الرسالة فيها وسائط حقيقية تستاهل تُنشر؟ يستثني صور معاينة الرابط الصغيرة
-    (أفاتار حساب بمعاينة تغريدة مقتبسة) بس يبقي الصور الحقيقية حتى لو جايه من نفس آلية
-    المعاينة (زي صورة لاعب مرفقة بتغريدة أصلية)."""
-    media = m.media
-    if isinstance(media, (MessageMediaPhoto, MessageMediaDocument)):
-        return True
-    if isinstance(media, MessageMediaWebPage):
-        wp = getattr(media, "webpage", None)
-        photo = getattr(wp, "photo", None)
-        if photo and not _is_small_thumbnail_photo(photo):
-            return True
-    return False
+# ============ Gemini ============
+def gemini_generate(prompt, gemini_key):
+    """يرسل الطلب إلى Gemini مع إعادة المحاولة عند بطء/انقطاع الاتصال.
 
+    إذا انتهت مهلة موديل، ينتقل للموديل التالي بدل إسقاط التشغيل مباشرة.
+    لا تتغير حالة المنشور ولا يتم نشره إذا فشلت الترجمة.
+    """
+    last = "no model tried"
+    for model in GEMINI_MODELS:
+        model_succeeded = False
+        for attempt in range(1, 4):
+            try:
+                r = requests.post(
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                    params={"key": gemini_key},
+                    json={
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 700},
+                    },
+                    # مهلة اتصال 20 ثانية، وانتظار الرد حتى 150 ثانية
+                    timeout=(20, 150),
+                )
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+                last = f"{model} -> {type(e).__name__}: {e}"
+                print(f"[gemini] {last}")
+                if attempt < 3:
+                    wait = 5 * attempt
+                    print(f"[gemini] إعادة المحاولة {attempt}/3 بعد {wait} ثوانٍ")
+                    time.sleep(wait)
+                    continue
+                print(f"[gemini] انتهت محاولات {model} بسبب مشكلة اتصال؛ تجربة الموديل التالي إن وجد")
+                break
 
-def _media_payload(m):
-    """الكائن المناسب لتمريره لـ send_file — Photo الحقيقي المستخرج لو كانت الوسائط من
-    نوع معاينة رابط (MessageMediaWebPage)، أو m.media مباشرة لباقي الحالات."""
-    if isinstance(m.media, MessageMediaWebPage):
-        return m.photo
-    return m.media
+            if r.status_code == 200:
+                data = r.json()
+                try:
+                    return data["candidates"][0]["content"]["parts"][0]["text"]
+                except (KeyError, IndexError, TypeError):
+                    raise RuntimeError(f"Gemini returned no text ({model}): {str(data)[:300]}")
 
+            last = f"{model} -> {r.status_code}: {r.text[:200]}"
+            print(f"[gemini] {last}")
 
-def extract_hidden_link_urls(message, source_username=None):
-    """يرجع روابط 'مخفية' خلف نص مقنّع زي 'اضغط هنا للمشاهدة' — نص الرسالة العادي ما يحتوي
-    الرابط الحقيقي أصلاً، فبدون هذا الاستخراج يضيع الرابط بالكامل عند النشر.
-    يتجاهل رابط قناة المصدر نفسها، وأي رابط خلف نص "Read more" أو "اقرأ المزيد"
-    (رابط لمقال بموقع المصدر — مو محتوى نحتاج ننقله)."""
-    if not message or not getattr(message, "entities", None):
-        return []
-    handle = (source_username or "").lstrip("@").lower()
-    skip_anchor_re = re.compile(r'read\s*more|اقرأ\s*المزيد', re.IGNORECASE)
-    urls = []
-    try:
-        for entity, anchor_text in message.get_entities_text(MessageEntityTextUrl):
-            url = entity.url
-            if handle and f"t.me/{handle}".lower() in url.lower():
-                continue
-            if skip_anchor_re.search(anchor_text or ""):
-                continue
-            urls.append(url)
-    except Exception:
-        pass
-    return urls
-
-
-def clean_text(text, source_username=None, strip_telegram_links=True):
-    if not text:
-        return ""
-    cleaned = text
-    cleaned = cleaned.replace('📊', '')
-    if source_username:
-        cleaned = re.sub(re.escape(source_username), '', cleaned, flags=re.IGNORECASE)
-    if strip_telegram_links:
-        # احذف أي رابط تيليجرام (قناة أو مجموعة أو دعوة انضمام) موجود بالنص — سواء قناة
-        # المصدر نفسها أو أي قناة/مجموعة ثانية يروّجلها. أي رابط خارجي غير t.me (موقع رسمي،
-        # نتائج، إلخ) يبقى كما هو ولا يُحذف
-        cleaned = re.sub(r'(https?://)?t\.me/\S+', '', cleaned, flags=re.IGNORECASE)
-    # روابط t.co (اختصار تويتر/X لمعاينة الصورة أو التغريدة الأصلية) — ما تحمل أي محتوى
-    # مفيد للقارئ العربي، تُحذف دايماً من كل القنوات
-    cleaned = re.sub(r'https?://t\.co/\S+', '', cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r'(?i)forwarded from.*', '', cleaned)
-    cleaned = re.sub(r'(?i)read\s*more\.?\s*$', '', cleaned.rstrip())
-    cleaned = re.sub(r'اقرأ\s*المزيد\.?\s*$', '', cleaned.rstrip())
-    cleaned = re.sub(r'أعيد التوجيه من.*', '', cleaned)
-    # حذف سطر التوقيع/الشكر اللي تضيفه قنوات ثانية بمنشورها (زي "نيمار ابن الانبار || @IRAQEDU")
-    # — يشتغل بكل القنوات، على أي سطر يحتوي هذا التوقيع بغض النظر عن الصيغة بالضبط
-    cleaned = re.sub(r'^.*نيمار\s*ابن\s*الانبار.*$', '', cleaned, flags=re.MULTILINE | re.IGNORECASE)
-    cleaned = re.sub(r'^.*@?IRAQEDU.*$', '', cleaned, flags=re.MULTILINE | re.IGNORECASE)
-    cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
-    return cleaned.strip()
-
-
-def contains_click_here_phrase(text):
-    """يفحص وجود عبارة 'اضغط هنا للمشاهدة' (وتنويعاتها) — منشورات بهذي الصيغة تُستبعد
-    بالكامل بناءً على طلب المستخدم (كثير منها طلع منشورات احتيال/تصيّد)."""
-    if not text:
-        return False
-    return bool(re.search(r'اضغط\s*هنا.{0,15}(للمشاهدة|لمشاهدة|مشاهدة)', text))
-
-# ==================== Gemini ====================
-
-def call_gemini(prompt, api_key, max_retries=3):
-    if not api_key:
-        raise RuntimeError("no gemini key")
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
-    headers = {"x-goog-api-key": api_key, "Content-Type": "application/json"}
-    body = {"contents": [{"parts": [{"text": prompt}]}]}
-
-    last_error = None
-    for attempt in range(1, max_retries + 1):
-        try:
-            resp = requests.post(url, json=body, headers=headers, timeout=30)
-            if resp.status_code in (429, 500, 502, 503, 504) and attempt < max_retries:
-                wait = 2 ** attempt
-                print(f"⏳ Gemini إرجاع {resp.status_code} — إعادة محاولة {attempt}/{max_retries} بعد {wait}ث")
+            # 429 بسبب حدّ الطلبات بالدقيقة: انتظر ثم أعد المحاولة.
+            if r.status_code == 429 and "PerDay" not in r.text and attempt < 3:
+                wait = 10 * attempt
+                print(f"[gemini] حدّ طلبات مؤقت؛ إعادة المحاولة بعد {wait} ثانية")
                 time.sleep(wait)
                 continue
-            resp.raise_for_status()
-            data = resp.json()
-            raw = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-            if raw.startswith("```"):
-                raw = raw.strip("`").strip()
-                if raw.lower().startswith("json"):
-                    raw = raw[4:].strip()
-            return json.loads(raw)
-        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
-            last_error = e
-            if attempt < max_retries:
-                wait = 2 ** attempt
-                print(f"⏳ خطأ اتصال بـ Gemini — إعادة محاولة {attempt}/{max_retries} بعد {wait}ث: {e}")
+
+            # أخطاء مؤقتة من Google: أعد المحاولة، ثم انتقل للموديل التالي.
+            if r.status_code in (500, 502, 503, 504) and attempt < 3:
+                wait = 5 * attempt
                 time.sleep(wait)
                 continue
-            raise
-        except Exception:
-            raise
-    if last_error:
-        raise last_error
-    raise RuntimeError("gemini call failed after retries")
-
-
-def call_gemini_vision(image_path, api_key, max_retries=3):
-    """يفحص صورة: هل فيها نص مكتوب (بأي لغة)؟ إذا نعم يرجع ترجمته/صياغته كتعليق عربي طبيعي.
-    يستخدم فقط عند غياب أي تعليق نصي على المنشور، عشان ما ينزل منشور صورة فاضية
-    وفيها نص أجنبي محد يفهمه القاري العربي."""
-    if not api_key:
-        return {"has_text": False, "caption": ""}
-    try:
-        with open(image_path, "rb") as f:
-            import base64
-            img_b64 = base64.b64encode(f.read()).decode()
-    except Exception:
-        return {"has_text": False, "caption": ""}
-
-    ext = image_path.lower().rsplit(".", 1)[-1]
-    mime = "image/png" if ext == "png" else "image/jpeg"
-
-    prompt = """افحص هذه الصورة: هل يوجد عليها أي نص مكتوب (عنوان، جملة، شعار كتابي) بأي لغة؟
-- إذا يوجد نص، لخّصه وأعد صياغته كتعليق قصير طبيعي بالعربية الفصحى (وليس ترجمة حرفية)، بدون وصف الصورة نفسها.
-- إذا لا يوجد أي نص مكتوب على الصورة إطلاقاً، اجعل has_text=false و caption فارغة.
-
-أعد النتيجة بصيغة JSON فقط: {"has_text": true/false, "caption": "النص بالعربية أو فارغ"}"""
-
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
-    headers = {"x-goog-api-key": api_key, "Content-Type": "application/json"}
-    body = {"contents": [{"parts": [
-        {"inline_data": {"mime_type": mime, "data": img_b64}},
-        {"text": prompt},
-    ]}]}
-
-    for attempt in range(1, max_retries + 1):
-        try:
-            resp = requests.post(url, json=body, headers=headers, timeout=30)
-            if resp.status_code in (429, 500, 502, 503, 504) and attempt < max_retries:
-                time.sleep(2 ** attempt)
-                continue
-            resp.raise_for_status()
-            data = resp.json()
-            raw = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-            if raw.startswith("```"):
-                raw = raw.strip("`").strip()
-                if raw.lower().startswith("json"):
-                    raw = raw[4:].strip()
-            result = json.loads(raw)
-            return {"has_text": bool(result.get("has_text", False)),
-                    "caption": (result.get("caption") or "").strip()}
-        except Exception as e:
-            if attempt < max_retries:
-                time.sleep(2 ** attempt)
-                continue
-            print(f"⚠️ خطأ فحص نص الصورة: {e}")
-            return {"has_text": False, "caption": ""}
-    return {"has_text": False, "caption": ""}
-
-
-def check_is_ad(text, api_key):
-    prompt = f"""حدد فقط إذا كان النص التالي إعلاناً مدفوعاً أو محتوى ترويجياً تجارياً.
-اعتبره إعلاناً (is_ad=true) لو فيه أي من هذي العلامات:
-- ترويج مباشر لمنتج، تطبيق، خدمة، قناة/حساب آخر، أو رعاية مدفوعة
-- سعر، خصم، أو عرض ("سعر الاشتراك"، "بدل من"، نسبة خصم، إلخ)
-- دعوة صريحة للتسجيل أو الاشتراك أو الحجز بدورة/كورس/منتج مقابل مبلغ
-- رقم أو معرّف تواصل "للحجز" أو "للاستفسار" أو "للتواصل" بخصوص خدمة أو دورة مدفوعة
-- أسماء مدرّسين/مراكز خاصة مع ترويج لدوراتهم (حتى لو المحتوى تعليمي بالمظهر)
-
-أي خبر عادي إخباري — حتى لو ذكر جوائز، مسابقات، إعلانات رسمية من جهة حكومية، أو أحداث،
-بدون سعر أو دعوة للشراء — **ليس إعلاناً**، اعتبره is_ad=false.
-عند الشك بين خبر عادي وإعلان بدون أي من العلامات فوق، اجعل is_ad=false. لا تعدل النص إطلاقاً.
-
-النص:
-{text}
-
-أعد النتيجة بصيغة JSON فقط: {{"is_ad": true/false}}"""
-    try:
-        result = call_gemini(prompt, api_key)
-        return bool(result.get("is_ad", False))
-    except Exception as e:
-        print(f"❌ خطأ فحص الإعلان: {e}")
-        return False
-
-def call_translate(text, api_key, extra_rules=None):
-    extra = f"\n{extra_rules}\n" if extra_rules else ""
-    prompt = f"""أنت كاتب عربي محترف. أعد صياغة النص التالي (بأي لغة كان مكتوب — إنجليزي، روسي، أو غيرها) بالعربية بالكامل.
-**ممنوع الترجمة الحرفية كلمة-بكلمة.** اكتبه وكأنك عربي شاهدت نفس الخبر وتكتبه لأول مرة بأسلوبك — غيّر ترتيب الجملة،
-ادمج أو افصل الجمل، واستخدم تعابير عربية طبيعية شائعة بدل نقل التراكيب الأجنبية حرفياً.
-تجاهل أي روابط أو إشارات لقناة المصدر. لا تضيف أي تعليق أو مقدمة من عندك.
-إذا كان النص إعلاناً مدفوعاً أو محتوى ترويجياً تجارياً صريحاً (منتج، تطبيق، خدمة، رعاية مدفوعة) اجعل should_post = false.
-أي خبر عادي — حتى لو ذكر جوائز أو مسابقات أو أحداث — ليس إعلاناً، انشره (should_post = true). عند الشك انشر.
-{extra}
-النص:
-{text}
-
-أعد النتيجة بصيغة JSON فقط: {{"should_post": true/false, "text": "الترجمة"}}"""
-    try:
-        result = call_gemini(prompt, api_key)
-        return {"should_post": bool(result.get("should_post", True)),
-                "text": (result.get("text") or text).strip()}
-    except Exception as e:
-        print(f"❌ خطأ الترجمة — لن يُنشر بلا ترجمة: {e}")
-        return {"should_post": False, "text": ""}
-
-def call_rephrase(text, api_key, extra_rules=None):
-    extra = f"\n{extra_rules}\n" if extra_rules else ""
-    prompt = f"""أنت محرر صحفي عراقي. أعد صياغة النص التالي بأسلوب صحفي احترافي واضح ومختصر بالعربية.
-تجاهل أي روابط أو إشارات لقناة المصدر. لا تضيف أي تعليق من عندك.
-إذا كان النص إعلاناً مدفوعاً أو محتوى ترويجياً تجارياً صريحاً (منتج، تطبيق، خدمة، رعاية مدفوعة) اجعل should_post = false.
-أي خبر عادي — حتى لو ذكر جوائز أو مسابقات أو أحداث — ليس إعلاناً، انشره (should_post = true). عند الشك انشر.
-{extra}
-النص:
-{text}
-
-أعد النتيجة بصيغة JSON فقط: {{"should_post": true/false, "text": "النص المعاد صياغته"}}"""
-    try:
-        result = call_gemini(prompt, api_key)
-        return {"should_post": bool(result.get("should_post", True)),
-                "text": (result.get("text") or text).strip()}
-    except Exception as e:
-        print(f"❌ خطأ إعادة الصياغة: {e}")
-        return {"should_post": True, "text": text}
-
-def call_match_links(text, api_key):
-    prompt = f"""أنت تنسّق منشورات قناة تبث روابط مشاهدة مباريات كرة القدم. حوّل النص التالي لنفس القالب بالضبط:
-
-- احذف أي "تمديد" أو تكرار حروف بأسماء الفرق (زي "فـ ـرنـ ـسـ ـا") — اكتب الاسم عادي بدون فواصل (زي "فرنسا").
-- سطر كل مباراة: "اسم_الفريق × اسم_الفريق" بدون أي إيموجي إطلاقاً (بدون أعلام دول، بدون ⚽️، بدون 🆚 — استخدم علامة × فقط).
-- سطر الوقت: "⏰ | الساعة مساءً بتوقيت مكة المكرمة" (اكتب "مكة المكرمة" نص صريح، بدون علم وبدون كلمة "الـ").
-- سطر المعلّق: "🎤 | الاسم" (بدون تمديد حروف بالاسم).
-- افصل بين كل مباراة والثانية بسطر فاضي.
-- بعد آخر مباراة، سطر فاضي ثم سطر رابط الدعوة: إذا كانت مباراة واحدة بس بكل المنشور اكتب "🔗 | رابط المباراة:"،
-  وإذا كانت أكثر من مباراة اكتب "🔗 | رابط المباريات:" — ثم رابط الدعوة (https://t.me/+...) بسطر لحاله.
-- بعده سطر فاضي ثم (بدون أي إيموجي بالبداية): "ملاحظة: اضغط على الرابط ثم «انضمام»، وبعدها اضغط مرة أخرى على الرابط للدخول 💎"
-  (إيموجي 💎 بالنهاية يبقى، بس احذف أي إيموجي كان بأول السطر زي ⬇️).
-- لا تحذف أي مباراة. لا تضف أي تعليق من عندك.
-
-مثال المدخل (مباراة واحدة):
-🇬🇧 تشيلسي 🆚 بورنموث 🏴󠁧󠁢󠁥󠁮󠁧󠁿
-⏰ | 5:00 مساءً بتوقيت 🇸🇦
-🎤 | علي محمد علي
-
-🔗 | رابط المباريات:
-https://t.me/+5hBOma9vTGo4MWRk
-
-⬇️ | ملاحظة: اضغط على الرابط ثم «انضمام»، وبعدها اضغط مرة أخرى على الرابط للدخول 💎
-
-مثال المخرج المطلوب بالضبط:
-تشيلسي × بورنموث
-⏰ | 5:00 مساءً بتوقيت مكة المكرمة
-🎤 | علي محمد علي
-
-🔗 | رابط المباراة:
-https://t.me/+5hBOma9vTGo4MWRk
-
-ملاحظة: اضغط على الرابط ثم «انضمام»، وبعدها اضغط مرة أخرى على الرابط للدخول 💎
-
-النص المطلوب تنسيقه الآن:
-{text}
-
-أعد النتيجة بصيغة JSON فقط: {{"text": "النص بعد الترتيب بنفس القالب أعلاه بالضبط"}}"""
-    try:
-        result = call_gemini(prompt, api_key)
-        return (result.get("text") or "").strip()
-    except Exception as e:
-        print(f"❌ خطأ تنسيق منشور المباريات: {e}")
-        return ""
-
-
-def call_fabrizio(text, api_key):
-    prompt = f"""أنت محرر لصفحة عربية تنقل كل منشورات حساب فابريزيو رومانو الرسمي بالعربية.
-
-معايير النشر:
-- انشر كل منشور يصلك (should_post = true) بلا استثناء — انتقالات، صفقات، تجديد عقود، تغطية مباراة،
-  إحصائيات، تصريحات، فيديوهات، أو أي خبر آخر مهما كان صغيراً أو هامشياً.
-- الاستثناء الوحيد: إذا كان النص إعلاناً مدفوعاً أو محتوى ترويجياً تجارياً صريحاً (منتج، تطبيق، خدمة،
-  رعاية مدفوعة) — عندها فقط اجعل should_post = false. أي خبر رياضي حقيقي ليس إعلاناً.
-- استثناء ثاني: منشورات الترويج لبودكاست/برنامج فابريزيو نفسه (زي "New pod on"، ترويج لحلقة
-  يوتيوب/بودكاست، دعوة للاستماع) تُعتبر ترويج ذاتي لمحتواه مو خبر مباشر — اجعلها should_post = false،
-  حتى لو ذكرت أسماء لاعبين بشكل عابر ("talks"، "more to follow" بدون تفاصيل فعلية).
-- استثناء ثالث: منشورات اللي جوهرها مقطع فيديو قصير مرفق من تويتر/X (لقطة، تكريم، هايلايت، "Watch:")
-  وما فيها خبر مكتوب فعلي غير جملة قصيرة وصفية — اجعلها should_post = false. السبب: الفيديو المرفق
-  عبارة عن معاينة رابط من X مو ملف تيليجرام حقيقي، والبوت ما يقدر ينشره، فينزل منشور فاضي بلا فائدة.
-- أي منشور يحتوي على عبارة "Here we go" يُنشر دائماً بلا استثناء (حتى لو جاء ضمن منشور بودكاست أو فيديو).
-
-الترجمة (فقط إذا should_post = true):
-- **ممنوع الترجمة الحرفية كلمة-بكلمة.** أعد صياغة الخبر بالكامل بأسلوب محرر رياضي عربي محترف
-  (زي أسلوب مواقع كووورة أو beIN SPORTS)، كأن الخبر كُتب أصلاً بالعربي وليس مترجماً.
-  غيّر ترتيب الجملة، ادمج أو افصل الجمل، واستخدم تعابير رياضية عربية شائعة (زي "أكد مصدر مقرب"،
-  "من المنتظر أن"، "بات قاب قوسين من") بدل الترجمة المباشرة للتراكيب الإنجليزية.
-- أبقِ عبارة "Here we go" بالإنجليزية كما هي حرفياً بدون ترجمة إذا وردت بالنص.
-- إذا ورد بالنص ذكر لفيديو على يوتيوب مع رابطه (يبدأ بـ youtube.com أو youtu.be)، أبقِ رابط اليوتيوب
-  هذا بالضبط كما هو حرفياً داخل النص المترجم — لا تحذفه ولا تغيّره.
-- احذف أي رابط أو إشارة لقناة المصدر نفسها (بما فيها روابط تويتر/X وإشارات "Fabrizio Romano on X")
-  — غير رابط اليوتيوب المذكور فوق، هذا يبقى.
-  لا تضيف تعليقات من عندك.
-
-النص:
-{text}
-
-أعد النتيجة بصيغة JSON فقط: {{"should_post": true/false, "text": "النص المُعالج"}}"""
-    try:
-        result = call_gemini(prompt, api_key)
-        return {"should_post": bool(result.get("should_post", True)),
-                "text": (result.get("text") or text).strip()}
-    except Exception as e:
-        print(f"❌ خطأ معالجة فابريزيو — لن يُنشر بلا ترجمة: {e}")
-        return {"should_post": False, "text": ""}
-
-async def apply_processing(config, text):
-    """يرجع (should_post, final_text)."""
-    mode = config["mode"]
-    if not text:
-        return True, ""
-
-    if not config.get("gemini_key"):
-        print(f"❌ سر Gemini مفقود بهذي القناة ({config['name']}) — تأكد من إضافته بـ GitHub Secrets. لن يُنشر.")
-        return False, ""
-
-    if mode == "copy":
-        is_ad = check_is_ad(text, config["gemini_key"])
-        return (not is_ad), text
-
-    if mode == "match_links":
-        result_text = call_match_links(text, config["gemini_key"])
-        return bool(result_text), result_text
-
-    if mode == "translate_en_ar":
-        result = call_translate(text, config["gemini_key"], config.get("extra_rules"))
-        return result["should_post"], result["text"]
-
-    if mode == "rephrase_ar":
-        result = call_rephrase(text, config["gemini_key"], config.get("extra_rules"))
-        return result["should_post"], result["text"]
-
-    if mode == "fabrizio_special":
-        force_post = bool(re.search(r'here\s*we\s*go', text, re.IGNORECASE))
-        result = call_fabrizio(text, config["gemini_key"])
-        should_post = bool(result["text"]) and (result["should_post"] or force_post)
-        return should_post, result["text"]
-
-    return True, text
-
-# ==================== معالجة ونشر دفعة رسائل (منشور مفرد أو ألبوم) ====================
-
-async def process_batch(source_id, messages):
-    config = CHANNELS.get(source_id)
-    if not config:
-        return
-
-    if source_id == STUDENT_LIBRARY_SOURCE_ID and _student_library_is_duplicate(messages):
-        print(f"⏭️ تم منع منشور مكرر — {config['name']} (نفس النص/الوسائط خلال آخر 72 ساعة)")
-        return
-
-    raw_text = ""
-    text_msg = None
-    for m in messages:
-        if m.message:
-            raw_text = m.message
-            text_msg = m
             break
 
-    if contains_click_here_phrase(raw_text):
-        print(f"⏭️  تم تجاهل منشور — {config['name']} (يحتوي 'اضغط هنا للمشاهدة' — يُستبعد دائماً)")
-        return
+        # جرّب الموديل التالي عند انتهاء المهلة/الحصة أو خطأ خدمة مؤقت.
+        if any(code in last for code in ("Timeout", "ConnectionError", "429", "404", "500", "502", "503", "504")):
+            continue
+        break
 
-    hidden_links = extract_hidden_link_urls(text_msg, config.get("source_username"))
-    if hidden_links:
-        # الرابط الحقيقي كان مخفي خلف نص زي "اضغط هنا" — نضيفه كنص ظاهر حتى ما يضيع
-        raw_text = (raw_text.rstrip() + "\n\n" + "\n".join(hidden_links)) if raw_text else "\n".join(hidden_links)
+    raise RuntimeError(f"Gemini failed after retries: {last}")
 
-    strip_tg_links = config["mode"] != "match_links"
-    cleaned = clean_text(raw_text, config.get("source_username"), strip_telegram_links=strip_tg_links)
-    should_post, final_text = await apply_processing(config, cleaned)
 
-    if not should_post:
-        print(f"⏭️  تم تجاهل منشور — {config['name']} (إعلان أو غير مهم، أو خطأ تقني بالمعالجة — راجع الأسطر فوق)")
-        return
+def ai_process(raw, mode, gemini_key):
+    if mode == "copy":
+        return raw
+    out = strip_hashtags(gemini_generate(PROMPTS[mode] + raw, gemini_key))
+    if out.upper().startswith("SKIP"):
+        return None
+    if mode == "translate_ar":
+        out = enforce_here_we_go(raw, out)
+    return out
 
-    # نتحقق من نوع الوسائط الفعلي (MessageMediaPhoto/Document حقيقي) بدل الخاصية العامة
-    # m.photo/m.video، لأن تيليثون أحياناً يرجّع صورة "معاينة الرابط" (thumbnail لمعاينة
-    # تغريدة مقتبسة) على إنها صورة حقيقية بالمنشور — وهذا يخلي البوت ينشرها غلط وكأنها محتوى.
-    media_msgs = [m for m in messages if _is_usable_media_msg(m)]
 
-    if config.get("skip_if_video") and any(m.video for m in media_msgs):
-        force_post = bool(re.search(r'here\s*we\s*go', raw_text, re.IGNORECASE))
-        if not force_post:
-            print(f"⏭️  تم تجاهل منشور — {config['name']} (يحتوي فيديو حقيقي مرفق — يُستبعد دائماً بهذي القناة)")
-            return
-
-    # فحص نص الصورة بالذكاء الاصطناعي (فقط عند غياب أي تعليق، بوضع ترجمة/إعادة صياغة)
-    # هذا يحتاج تحميل صورة واحدة صغيرة فقط — الفيديوهات/الملفات ما تُحمَّل إطلاقاً (انظر تحت)
-    if (not final_text.strip()
-            and config["mode"] in ("translate_en_ar", "rephrase_ar")):
-        first_photo_msg = next((m for m in media_msgs if m.photo), None)
-        if first_photo_msg:
-            tmp_path = None
-            try:
-                tmp_path = await client.download_media(first_photo_msg, file=f"{DOWNLOAD_DIR}/")
-                if tmp_path:
-                    vision = call_gemini_vision(tmp_path, config["gemini_key"])
-                    if vision["has_text"] and vision["caption"]:
-                        final_text = vision["caption"]
-            except Exception as e:
-                print(f"⚠️ خطأ فحص نص الصورة — {config['name']}: {e}")
-            finally:
-                if tmp_path:
-                    try:
-                        os.remove(tmp_path)
-                    except OSError:
-                        pass
-
-    if config.get("add_link") and config.get("link"):
-        link_text = config["link"]
-        final_text = f"{final_text}\n\n{link_text}" if final_text else link_text
-
+# ============ فيسبوك ============
+def fb_check(r):
     try:
-        if media_msgs:
-            # نرسل الوسائط بالإشارة المباشرة لملفها على سيرفرات تلجرام — بدون تحميل
-            # أو إعادة رفع محلياً. هذا يشتغل حتى لفيديوهات/ملفات بأحجام كبيرة جداً
-            # (جيجابايتات) بدون ما يمر أي بايت عبر GitHub Actions، وتلقائياً ما يظهر
-            # اسم/قناة المرسل الأصلي لأنها رسالة جديدة مو Forward.
-            to_send = _media_payload(media_msgs[0]) if len(media_msgs) == 1 else [_media_payload(m) for m in media_msgs]
-            try:
-                await client.send_file(config["target"], to_send,
-                                        caption=final_text or None, parse_mode="html")
-                if source_id == STUDENT_LIBRARY_SOURCE_ID:
-                    _remember_student_library_post(messages)
-                print(f"✅ نُشر (وسائط) — {config['name']}")
-            except Exception as e:
-                print(f"⚠️ فشل النسخ المباشر، محاولة تحميل احتياطي — {config['name']}: {e}")
-                # احتياط نادر: لو فشلت الإشارة المباشرة (مثلاً ملف قديم جداً)، جرّب تحميل حقيقي
-                files = []
-                for m in media_msgs:
-                    try:
-                        path = await client.download_media(m, file=f"{DOWNLOAD_DIR}/")
-                        if path:
-                            files.append(path)
-                    except Exception as e2:
-                        print(f"⚠️ فشل التحميل الاحتياطي لملف — {config['name']}: {e2}")
-                if files:
-                    to_send2 = files[0] if len(files) == 1 else files
-                    await client.send_file(config["target"], to_send2,
-                                            caption=final_text or None, parse_mode="html")
-                    for f in files:
-                        try:
-                            os.remove(f)
-                        except OSError:
-                            pass
-                    if source_id == STUDENT_LIBRARY_SOURCE_ID:
-                        _remember_student_library_post(messages)
-                    print(f"✅ نُشر (وسائط، تحميل احتياطي) — {config['name']}")
-                elif final_text:
-                    await client.send_message(config["target"], final_text,
-                                               parse_mode="html", link_preview=False)
-                    if source_id == STUDENT_LIBRARY_SOURCE_ID:
-                        _remember_student_library_post(messages)
-                    print(f"⚠️ نُشر نص فقط (فشل النسخ والتحميل) — {config['name']}")
-                else:
-                    print(f"❌ تم تجاهل منشور — فشل كل محاولات نشر الوسائط — {config['name']}")
-        elif final_text:
-            await client.send_message(config["target"], final_text,
-                                       parse_mode="html", link_preview=False)
-            if source_id == STUDENT_LIBRARY_SOURCE_ID:
-                _remember_student_library_post(messages)
-            print(f"✅ نُشر (نص) — {config['name']}")
-    except Exception as e:
-        print(f"❌ خطأ بالنشر — {config['name']}: {e}")
+        body = r.json()
+    except Exception:
+        raise RuntimeError(f"Facebook non-JSON response {r.status_code}: {r.text[:200]}")
+    if r.status_code != 200 or "error" in body:
+        err = body.get("error", {})
+        if err.get("code") == 190:
+            raise RuntimeError("Facebook token invalid/expired (code 190) — generate a new Page token")
+        raise RuntimeError(f"Facebook error {r.status_code}: {body}")
+    return body
 
-# ==================== معالجة الرسائل الفائتة (بولينغ) ====================
 
-async def catch_up_channel(source_id):
-    config = CHANNELS.get(source_id, {})
-    # استخدم اليوزرنيم العام إذا موجود — يتحل حتى لو الحساب مو منضم للقناة.
-    # الـ ID الرقمي وحده يفشل أحياناً لو الحساب ما "شاف" القناة من قبل (access_hash غير محفوظ).
-    entity_ref = config.get("source_username") or source_id
+def fb_post(page_id, token, text, images):
+    base = f"{GRAPH}/{page_id}"
+    if not images:
+        return fb_check(requests.post(f"{base}/feed", data={"message": text, "access_token": token}, timeout=60))
+    if len(images) == 1:
+        data = {"access_token": token}
+        if text:
+            data["message"] = text
+        return fb_check(requests.post(f"{base}/photos", data=data, files={"source": ("img.jpg", images[0])}, timeout=120))
+    # ألبوم: ننشر كل صورة غير منشورة ثم منشور واحد يجمعها
+    ids = []
+    for img in images[:10]:
+        b = fb_check(requests.post(
+            f"{base}/photos",
+            data={"access_token": token, "published": "false"},
+            files={"source": ("img.jpg", img)}, timeout=120))
+        ids.append(b["id"])
+    data = {"access_token": token, "message": text}
+    for i, pid in enumerate(ids):
+        data[f"attached_media[{i}]"] = json.dumps({"media_fbid": pid})
+    return fb_check(requests.post(f"{base}/feed", data=data, timeout=60))
 
-    key = str(source_id)
-    last_id = state.get(key, 0)
 
-    if last_id == 0:
-        latest = await client.get_messages(entity_ref, limit=1)
-        if latest:
-            last_id = max(latest[0].id - 5, 0)
-        state[key] = last_id
-        save_state(state)
+def fb_comment(token, post_id, message):
+    r = requests.post(
+        f"{GRAPH}/{post_id}/comments",
+        data={"message": message, "access_token": token},
+        timeout=60,
+    )
+    return fb_check(r)
 
-    messages = await client.get_messages(entity_ref, min_id=last_id, limit=200)
-    if not messages:
-        return
 
-    messages = list(reversed(messages))  # من الأقدم للأحدث
-    i = 0
-    while i < len(messages):
-        msg = messages[i]
-        if msg.grouped_id:
-            group = [m for m in messages if m.grouped_id == msg.grouped_id]
-            group.sort(key=lambda m: m.id)
-            await process_batch(source_id, group)
-            new_last = group[-1].id
-            i += len(group)
+# ============ تيليجرام ============
+def classify(m):
+    """photo | text | skip"""
+    if m.video or m.gif or m.document or m.audio or m.voice or m.video_note or m.sticker:
+        return "skip"          # فيديو، ملفات، ومعاينات فيديو X
+    if m.photo:
+        return "photo"
+    if m.media is not None and m.web_preview is None:
+        return "skip"          # استفتاء أو شي غريب
+    return "text"
+
+
+def group_messages(msgs):
+    items, seen = [], {}
+    for m in msgs:
+        if m.grouped_id:
+            if m.grouped_id in seen:
+                seen[m.grouped_id].append(m)
+                continue
+            seen[m.grouped_id] = [m]
+            items.append(seen[m.grouped_id])
         else:
-            await process_batch(source_id, [msg])
-            new_last = msg.id
-            i += 1
-        state[key] = new_last
-        save_state(state)
+            items.append([m])
+    return items
 
-# ==================== التشغيل الرئيسي ====================
-# تشغيلة واحدة قصيرة: تتصل، تفحص كل قناة مرة واحدة، تحفظ الحالة، وتطفي.
-# لا يوجد أي استماع مباشر أو حلقة انتظار — هذا هو الفرق الجوهري عن النسخة السابقة.
+
+async def fetch_new(client, source, last_id):
+    if last_id is None:
+        # أول تشغيل: آخر 5 فقط
+        latest = [m async for m in client.iter_messages(source, limit=FIRST_RUN_COUNT)]
+        if not latest:
+            return [], 0
+        last_id = min(m.id for m in latest) - 1
+    msgs = [m async for m in client.iter_messages(source, min_id=last_id, reverse=True, limit=FETCH_LIMIT)]
+    return group_messages(msgs), last_id
+
+
+async def run_page(client, key, cfg, state, gemini_key):
+    page_id = need(cfg["page_id_env"])
+    token = need(cfg["token_env"])
+    st = state.setdefault(key, {"last_id": None, "hashes": []})
+
+    items, last_id = await fetch_new(client, cfg["source"], st["last_id"])
+    if st["last_id"] is None:
+        st["last_id"] = last_id
+    print(f"[{key}] {len(items)} new items")
+
+    for grp in items:
+        top = max(m.id for m in grp)
+        kinds = [classify(m) for m in grp]
+        raw = next((m.message for m in grp if m.message), "") or ""
+        raw = clean_text(raw, cfg["source"])
+        has_photo = any(k == "photo" for k in kinds)
+        wp = next((m.media.webpage for m in grp if isinstance(m.media, MessageMediaWebPage)), None)
+        is_preview = wp is not None and not any(isinstance(m.media, MessageMediaPhoto) for m in grp)
+        if wp is not None:
+            print(f"[{key}] preview info id={top} type={getattr(wp, 'type', None)} duration={getattr(wp, 'duration', None)} embed={bool(getattr(wp, 'embed_url', None))}")
+
+        def done(why):
+            print(f"[{key}] {why} {top}")
+            st["last_id"] = top
+            save_state(state)
+
+        if "skip" in kinds:
+            done("[SKIP media]"); continue
+        if cfg.get("skip_rt") and is_rt(raw):
+            done("[SKIP RT]"); continue
+        if cfg.get("skip_preview_video") and is_preview and preview_is_video(wp):
+            done("[SKIP preview video]"); continue
+        if is_preview and letters_count(raw) < cfg.get("min_letters", 15):
+            done("[SKIP empty quote]"); continue
+        if not raw and not has_photo:
+            done("[SKIP empty]"); continue
+        if cfg.get("skip_podcast") and is_podcast_promo(raw):
+            done("[SKIP podcast]"); continue
+        if raw and h(raw) in st["hashes"]:
+            done("[SKIP duplicate]"); continue
+
+        text = ""
+        if raw:
+            text = ai_process(raw, cfg["mode"], gemini_key)
+            if text is None:
+                done("[SKIP ad]"); continue
+
+        images = []
+        for m, k in zip(grp, kinds):
+            if k == "photo":
+                data = await client.download_media(m, file=bytes)
+                if data:
+                    images.append(data)
+
+        if not text and not images:
+            done("[SKIP nothing to post]"); continue
+
+        text = f"{text}\n\n{FOOTER}" if text else FOOTER
+
+        res = fb_post(page_id, token, text, images)   # يرمي خطأ لو فشل فلا تتقدم الحالة
+        post_id = res.get("post_id") or res.get("id")
+
+        # التعليق الأول: لو فشل لا نفشل المنشور (وإلا ينشر مرة ثانية)
+        try:
+            fb_comment(token, post_id, FIRST_COMMENT)
+        except Exception as e:
+            print(f"[{key}] WARNING comment failed for {post_id}: {e}")
+
+        if raw:
+            st["hashes"] = (st["hashes"] + [h(raw)])[-100:]
+        done("[OK]")
+
 
 async def main():
-    await client.start()
-    print("🚀 بدء فحص القنوات الثمانية (بولينغ)...")
+    api_id = int(need("TG_API_ID"))
+    api_hash = need("TG_API_HASH")
+    session = need("TG_SESSION")
+    gemini_key = need("GEMINI_API_KEY")
 
-    for source_id, cfg in CHANNELS.items():
-        print(f"⏳ فحص — {cfg['name']}")
-        try:
-            await catch_up_channel(source_id)
-        except Exception as e:
-            print(f"❌ فشل فحص قناة كامل (تخطّي — البقية بتكمل): {cfg['name']} — {e}")
+    client = TelegramClient(StringSession(session), api_id, api_hash)
+    await client.connect()
+    if not await client.is_user_authorized():
+        print("[ERROR] TG_SESSION is not authorized — generate a new session string")
+        sys.exit(1)
 
-    await client.disconnect()
-    commit_state()
-    print("✅ انتهت التشغيلة — الاتصال مقفول.")
+    state = load_state()
+    failed = False
+    try:
+        for key, cfg in PAGES.items():
+            try:
+                await run_page(client, key, cfg, state, gemini_key)
+            except Exception as e:
+                failed = True
+                print(f"[{key}] FAILED: {e}")
+    finally:
+        save_state(state)
+        await client.disconnect()
+    if failed:
+        sys.exit(1)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
