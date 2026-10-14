@@ -1,5 +1,5 @@
 {
-  "-1001344466508": 67293,
+  "-1001344466508": 67294,
   "-1003922419894": 1842,
   "-1001565832101": 5778,
   "-1001498073945": 3936,
@@ -11,7 +11,7 @@
   "-1009001073232": 170504,
   "-1009001498074": 15257,
   "-1009917651232": 4262,
-  "-1009001498075": 8480,
+  "-1009001498075": 8482,
   "-1009003946451": 275,
   "-1009003922420": 6526,
   "dedupe:-1001530089992": [
@@ -460,6 +460,11 @@
         "hash": "39d096e9567d6259f9ff23c1008d96f95a2e0a3dcedee2cae20519dffccefbff",
         "text": "some students at northwestern university are now asking whether they should stay in mathematics at all after openai posted hundreds of ai generated papers on open problems in a single release antonio auffinger a professor of mathematics at northwestern university says his own priority has moved to keeping talented people in the field and helping them grow source aipost",
         "time": 1791975740
+      },
+      {
+        "hash": "82f0e3befa9d5020a882d1c3f413976c64b0a83a936b4fcbb6db360019184d0f",
+        "text": "american tech billionaire and co owner of palantir alex karp has bought himself a 15 000 hectare property in northern sweden for 25m his newly founded swedish company cladonia describes itself as engaged in forestry and denies any plans for data centers the property is almost the size of the city of stockholm and is located in the middle of nowhere aipost",
+        "time": 1791998924
       }
     ],
     "-1009917651232": [
@@ -646,6 +651,11 @@
         "hash": "903b65c557051915c6eb82226bcd7bab901fb6886cadb3d5310ed0dae837c449",
         "text": "alex scott could leave bournemouth in january in case of big proposal the stance has changed after meeting with agents as bournemouth rejected all the proposals in the summer chelsea are still involved liverpool were keen also in july price tag expected to be over 100m as bbc reports fabrizio romano fabrizioromano oct 14 2026",
         "time": 1791986966
+      },
+      {
+        "hash": "e33c75961c4ef3d3a876f10e6dddb84eaf9900dbc9668912732a10cdc3657593",
+        "text": "bradley barcola scores his first two goals for liverpool on fire fabrizio romano fabrizioromano oct 14 2026",
+        "time": 1791998922
       }
     ],
     "-1001565832101": [
