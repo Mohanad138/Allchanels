@@ -1,10 +1,10 @@
 {
-  "-1001344466508": 67303,
+  "-1001344466508": 67304,
   "-1003922419894": 1842,
   "-1001565832101": 5778,
   "-1001498073945": 3936,
   "-1001073231505": 75956,
-  "-1004443585067": 4891,
+  "-1004443585067": 4893,
   "-1001530089992": 60996,
   "-1003946450145": 606,
   "-1009003922419": 2120,
@@ -233,16 +233,6 @@
     ],
     "-1004443585067": [
       {
-        "hash": "e582fede65189371c337a6a5f42fa90660625bd0d7ec096d5ac2aa5dc497f793",
-        "text": "3 1 كلوب بروج",
-        "time": 1791923662
-      },
-      {
-        "hash": "887b54d08b374ee0db9df38aa7c2ca8abef8b3f2682856a8e84500c96f98fbcc",
-        "text": "2 0 اتلتيكو مدريد",
-        "time": 1791924027
-      },
-      {
         "hash": "ce944bd5f34918f618356a3556740db828b26e961ea65bb293e4e4e39aaead8a",
         "text": "2 3 الانتر",
         "time": 1791924080
@@ -431,6 +421,16 @@
         "hash": "1b5935d00d10e2012a20b8d65706584688d92cccee42757d604e2f641a529f78",
         "text": "",
         "time": 1792006641
+      },
+      {
+        "hash": "25d21701c5d8dbc0a5afbec1ac61a05ecdf2125ce4098419a20e69c44e01e654",
+        "text": "",
+        "time": 1792006704
+      },
+      {
+        "hash": "68ef8591372c325c03103d4dc03c7eb87a056a91620bf9c4c0912048fe6aa8f2",
+        "text": "",
+        "time": 1792006705
       }
     ],
     "-1009003946451": [
@@ -731,6 +731,11 @@
         "hash": "3c9f2a541bdab725e43a18fa6c232abe5a316d7250b8fa8071457bb9141f084d",
         "text": "pep guardiola back to etihad stadium for the first team since leaving man city last summer fabrizio romano fabrizioromano oct 14 2026",
         "time": 1792006100
+      },
+      {
+        "hash": "e28440a185e9f86692c1d7c3e9b85826a0ca18463f0ba87a3b1e3269af293c3c",
+        "text": "kylian mbappé scores his 72th champions league goal and enters into the t5 ranking for ucl career goals fabrizio romano fabrizioromano oct 14 2026",
+        "time": 1792006700
       }
     ],
     "-1001565832101": [
