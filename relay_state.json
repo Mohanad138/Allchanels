@@ -11,7 +11,7 @@
   "-1009001073232": 170483,
   "-1009001498074": 15257,
   "-1009917651232": 4261,
-  "-1009001498075": 8479,
+  "-1009001498075": 8480,
   "-1009003946451": 273,
   "-1009003922420": 6526,
   "dedupe:-1001530089992": [
@@ -375,6 +375,11 @@
         "hash": "843c8071e22515aa8b39f1194d1441fbce517262624d53c9bb477c23a9b3d175",
         "text": "the information reports the trump administration intends to transfer 3 top officials from the center for advancing innovation and standards for super intelligence caissi to the white house its being done so its testers are in the room when policy on new models gets made rather than being consulted after the fact a white house official framed it as a fix for poor coordination with commerce aipost",
         "time": 1791965839
+      },
+      {
+        "hash": "39d096e9567d6259f9ff23c1008d96f95a2e0a3dcedee2cae20519dffccefbff",
+        "text": "some students at northwestern university are now asking whether they should stay in mathematics at all after openai posted hundreds of ai generated papers on open problems in a single release antonio auffinger a professor of mathematics at northwestern university says his own priority has moved to keeping talented people in the field and helping them grow source aipost",
+        "time": 1791975740
       }
     ],
     "-1009917651232": [
