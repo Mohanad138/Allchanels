@@ -1,10 +1,10 @@
 {
-  "-1001344466508": 67302,
+  "-1001344466508": 67303,
   "-1003922419894": 1842,
   "-1001565832101": 5778,
   "-1001498073945": 3936,
   "-1001073231505": 75956,
-  "-1004443585067": 4883,
+  "-1004443585067": 4884,
   "-1001530089992": 60996,
   "-1003946450145": 606,
   "-1009003922419": 2120,
@@ -233,11 +233,6 @@
     ],
     "-1004443585067": [
       {
-        "hash": "1cfcb7b5b049ce020f9953e8aa8a564652770196e12d147fa244cc3670638980",
-        "text": "2 2 البايرن",
-        "time": 1791922760
-      },
-      {
         "hash": "a3b5203e3edfc67265999bb4cb28a55d9740a5d5235c0c3e8eb97eff9b69a6e0",
         "text": "2 1 كلوب بروج",
         "time": 1791922942
@@ -431,6 +426,11 @@
         "hash": "327c6841135a06d58c609f4986afccac64dcb051f622323cd3e97ea98bb3de38",
         "text": "روما 1 1 ريال مدريد",
         "time": 1792006041
+      },
+      {
+        "hash": "0f87d9564a5eb6f9d14296100606482973bfc7b6777b99f462d0cd3552ff7162",
+        "text": "",
+        "time": 1792006103
       }
     ],
     "-1009003946451": [
@@ -726,6 +726,11 @@
         "hash": "6bca7df519f67ddbd98e203a549c3ed66808454e9cd0a4ceb8aa6fbef5f9487e",
         "text": "bradley barcola gets the match ball after the hat trick for liverpool 3 fabrizio romano fabrizioromano oct 14 2026",
         "time": 1792004658
+      },
+      {
+        "hash": "3c9f2a541bdab725e43a18fa6c232abe5a316d7250b8fa8071457bb9141f084d",
+        "text": "pep guardiola back to etihad stadium for the first team since leaving man city last summer fabrizio romano fabrizioromano oct 14 2026",
+        "time": 1792006100
       }
     ],
     "-1001565832101": [
