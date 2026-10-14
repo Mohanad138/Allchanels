@@ -4,14 +4,14 @@
   "-1001565832101": 5779,
   "-1001498073945": 3936,
   "-1001073231505": 75956,
-  "-1004443585067": 4932,
+  "-1004443585067": 4935,
   "-1001530089992": 60997,
   "-1003946450145": 606,
   "-1009003922419": 2120,
   "-1009001073232": 170513,
   "-1009001498074": 15257,
   "-1009917651232": 4263,
-  "-1009001498075": 8482,
+  "-1009001498075": 8484,
   "-1009003946451": 275,
   "-1009003922420": 6528,
   "dedupe:-1001530089992": [
@@ -233,21 +233,6 @@
     ],
     "-1004443585067": [
       {
-        "hash": "68ef8591372c325c03103d4dc03c7eb87a056a91620bf9c4c0912048fe6aa8f2",
-        "text": "",
-        "time": 1792006705
-      },
-      {
-        "hash": "960978467d39fb9cf9d61d417c3d2f03abdec9aaef657b43c0a2ed00af1dca94",
-        "text": "استون فيلا 3 0 فنربخشة",
-        "time": 1792006881
-      },
-      {
-        "hash": "ce919d53ff06a17dda1758641587ec553d836d4741f38f88b18bfdd995ce65ea",
-        "text": "ريال بيتيس 0 1 بورتو",
-        "time": 1792006940
-      },
-      {
         "hash": "cd566539011b9f0d08ebbe2e476d55f7721a11cc9fe666536c23fb069ba8fb7e",
         "text": "",
         "time": 1792007060
@@ -431,6 +416,21 @@
         "hash": "5c42e9dd70d80190640fde91d5f85e5710d782c89dc299712384d213c08faa2e",
         "text": "استون فيلا 6 0 فنربخشة",
         "time": 1792010913
+      },
+      {
+        "hash": "76de498616c9f64e546ff590ee4ce147d39f767631261c7305fb5bcc45215046",
+        "text": "ركلة جزاء لمصلحة باريس",
+        "time": 1792010972
+      },
+      {
+        "hash": "9a3cc8b2a84414e3769c97c7ed146c58c9bd76fe772bcc2f8ddad9bed382891e",
+        "text": "",
+        "time": 1792010972
+      },
+      {
+        "hash": "257471c15b48b05b51d2910f716d2bbd61c382cd0a2c3706ee33190713be0a46",
+        "text": "",
+        "time": 1792010977
       }
     ],
     "-1009003946451": [
@@ -485,6 +485,11 @@
         "hash": "82f0e3befa9d5020a882d1c3f413976c64b0a83a936b4fcbb6db360019184d0f",
         "text": "american tech billionaire and co owner of palantir alex karp has bought himself a 15 000 hectare property in northern sweden for 25m his newly founded swedish company cladonia describes itself as engaged in forestry and denies any plans for data centers the property is almost the size of the city of stockholm and is located in the middle of nowhere aipost",
         "time": 1791998924
+      },
+      {
+        "hash": "c14f1f630bc6d225b40e0087b4ab9d3912712793263ce730a4f028395ff21c9a",
+        "text": "anthropic says rogue ai worms could soon hijack smart home devices and spread across the internet without human intervention we re seeing signs of life for ai worms anthropic warned comparing their potential spread to digital slime mold ft reports the firm warns self replicating ai agents may be just months away from infiltrating smart tvs ovens security cameras and other connected devices unlike traditional malware these ai worms could autonomously identify vulnerable devices compromise them and replicate across networks the company says a fully autonomous ai worm has not yet emerged but the individual capabilities needed are rapidly developing aipost",
+        "time": 1792010967
       }
     ],
     "-1009917651232": [
