@@ -11,7 +11,7 @@
   "-1009001073232": 170470,
   "-1009001498074": 15257,
   "-1009917651232": 4261,
-  "-1009001498075": 8471,
+  "-1009001498075": 8473,
   "-1009003946451": 272,
   "-1009003922420": 6523,
   "dedupe:-1001530089992": [
@@ -290,6 +290,11 @@
         "hash": "4638b6313b29d2da281e9c2b583ddea5e69bfb247bb81858700794abedb914bf",
         "text": "openai caught russian operatives using chatgpt in a campaign targeting schools in peru their internal reports claim they posed as a regional education authority in peru to get schools to hold ukraine related events openai says the campaign drew a reaction from at least one polish member of the european parliament meanwhile iranian operatives used 7 fake authors to publish almost 100 articles in outlets including daily kos openai says it has banned the russian and iranian accounts aipost",
         "time": 1791926265
+      },
+      {
+        "hash": "20f3a09a36c71d4b5d6cf0eeca71dfe3949e2717a632795ec2feb596b3272429",
+        "text": "ecogpt is growing fast and planting trees along the way in just six months ecogpt has reached 5m users planted more than 425 000 trees and delivered over 5 trillion tokens the ai platform is free to use powered by efficient open source ai and says it doesn t train foundation models on your chats growth is accelerating at 50 month over month and the team is hiring source aipost",
+        "time": 1791936140
       }
     ],
     "-1009917651232": [
