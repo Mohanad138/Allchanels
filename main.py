@@ -218,6 +218,26 @@ def _is_small_thumbnail_photo(photo, threshold=250):
         return False
 
 
+def _message_has_any_video(m):
+    """يفحص وجود فيديو بالرسالة بأي شكل — فيديو مرفق حقيقي (MessageMediaDocument) أو فيديو
+    مضمّن داخل معاينة رابط تغريدة (MessageMediaWebPage). يُستخدم فقط لقرار 'استبعد المنشور
+    لأنه فيديو'، بغض النظر هل الفيديو هذا أصلاً داخل قائمة الوسائط القابلة للنشر أو لا —
+    لأن فيديو معاينة الرابط ما نقدر ننشره، لكن لازم نعرف بوجوده عشان نستبعد المنشور."""
+    media = m.media
+    if isinstance(media, MessageMediaDocument):
+        return bool(m.video)
+    if isinstance(media, MessageMediaWebPage):
+        wp = getattr(media, "webpage", None)
+        if wp is None:
+            return False
+        if getattr(wp, "type", None) == "video":
+            return True
+        doc = getattr(wp, "document", None)
+        if doc is not None and str(getattr(doc, "mime_type", "")).startswith("video/"):
+            return True
+    return False
+
+
 def _is_usable_media_msg(m):
     """هل هذي الرسالة فيها وسائط حقيقية تستاهل تُنشر؟ يستثني صور معاينة الرابط الصغيرة
     (أفاتار حساب بمعاينة تغريدة مقتبسة) بس يبقي الصور الحقيقية حتى لو جايه من نفس آلية
@@ -692,7 +712,7 @@ async def process_batch(source_id, messages):
 
     force_post_here_we_go = bool(re.search(r'here\s*we\s*go', raw_text, re.IGNORECASE))
 
-    if config.get("skip_if_video") and any(m.video for m in media_msgs) and not force_post_here_we_go:
+    if config.get("skip_if_video") and any(_message_has_any_video(m) for m in messages) and not force_post_here_we_go:
         print(f"⏭️  تم تجاهل منشور — {config['name']} (يحتوي فيديو حقيقي مرفق — يُستبعد دائماً بهذي القناة)")
         return
 
