@@ -17,7 +17,6 @@ import time
 import asyncio
 import subprocess
 import difflib
-import xml.etree.ElementTree as ET
 
 from telethon import TelegramClient
 from telethon.sessions import StringSession
@@ -64,8 +63,16 @@ CHANNELS = {
         "skip_if_video": True,
         "skip_if_youtube": True,
     },
-    # ملاحظة: قناة "سعر الدولار في العراق" انحذفت من هنا — تحوّلت لقناة "كأس آسيا" اللي
-    # مصدرها مواقع إنترنت (مو تيليجرام) عبر WEB_CHANNEL تحت، الهدف @AsiaCup24.
+    -1009003922421: {
+        "name": "كأس آسيا",
+        "target": "@AsiaCup24",
+        "mode": "copy",
+        "gemini_key": GEMINI_KEY_AFLAM,
+        "source_username": "@sportts_iq",  # امبراطورية الاخبار العراقية
+        "topic_filter": "منشورات تخص كأس آسيا لكرة القدم (AFC Asian Cup) فقط — مباريات، نتائج، "
+                         "تشكيلات، تأهل، منتخبات مشاركة. أي خبر رياضي أو غير رياضي آخر غير متعلق "
+                         "بكأس آسيا تحديداً يُعتبر غير متعلق ويُتجاهل.",
+    },
     -1001565832101: {
         "name": "شكو ماكو بـ كركوك",
         "target": -1001812867607,
@@ -155,7 +162,7 @@ def save_state(state):
 state = load_state()
 
 DUP_HISTORY_SIZE = 15
-DUP_SIMILARITY_THRESHOLD = 0.85
+DUP_SIMILARITY_THRESHOLD = 0.80
 
 def is_duplicate_content(source_id, text):
     """يقارن النص الجديد بآخر 15 منشور بنفس القناة — لو فيه تشابه 85%+ يُعتبر تكرار
@@ -826,130 +833,6 @@ async def catch_up_channel(source_id):
         state[key] = new_last
         save_state(state)
 
-# ==================== قناة كأس آسيا (مصدرها مواقع إنترنت — منفصل كلياً عن قنوات تيليجرام) ====================
-# هذا القسم مستقل تماماً عن CHANNELS وآلية تيليثون — أي خطأ فيه ما يأثر على أي قناة ثانية
-# (مُحاط بـ try/except بالكامل من main()). المصدر: تجميع Google News اللي يغطي عشرات المواقع
-# العربية تلقائياً بدل تحديد موقع وحد لحاله.
-
-WEB_CHANNEL = {
-    "name": "كأس آسيا",
-    "target": "@AsiaCup24",
-    "gemini_key": GEMINI_KEY_AFLAM,
-    "queries": ["كأس آسيا", "كأس أمم آسيا", "AFC Asian Cup"],
-    "max_items_per_run": 5,
-    "max_seen_links": 500,
-}
-
-
-def _web_fetch_google_news(query):
-    url = ("https://news.google.com/rss/search?q=" + requests.utils.quote(query) +
-           "&hl=ar&gl=SA&ceid=SA:ar")
-    resp = requests.get(url, timeout=20, headers={"User-Agent": "Mozilla/5.0"})
-    resp.raise_for_status()
-    root = ET.fromstring(resp.content)
-    items = []
-    for item in root.findall(".//item"):
-        link = (item.findtext("link") or "").strip()
-        title = (item.findtext("title") or "").strip()
-        if link:
-            items.append({"link": link, "title": title})
-    return items
-
-
-def _web_extract_meta(html):
-    def _find(prop):
-        pattern1 = r'<meta[^>]+(?:property|name)=["\']' + re.escape(prop) + r'["\'][^>]+content=["\']([^"\']+)["\']'
-        m = re.search(pattern1, html, re.IGNORECASE)
-        if not m:
-            pattern2 = r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+(?:property|name)=["\']' + re.escape(prop) + r'["\']'
-            m = re.search(pattern2, html, re.IGNORECASE)
-        return m.group(1).strip() if m else None
-    return {
-        "image": _find("og:image"),
-        "description": _find("og:description") or _find("description"),
-        "title": _find("og:title"),
-    }
-
-
-async def process_web_channel():
-    cfg = WEB_CHANNEL
-    seen = set(state.setdefault("web_seen_links", []))
-
-    candidates = []
-    seen_in_batch = set()
-    for q in cfg["queries"]:
-        try:
-            items = _web_fetch_google_news(q)
-        except Exception as e:
-            print(f"⚠️ فشل جلب RSS لـ '{q}' — {cfg['name']}: {e}")
-            continue
-        for it in items:
-            if it["link"] not in seen and it["link"] not in seen_in_batch:
-                candidates.append(it)
-                seen_in_batch.add(it["link"])
-
-    published = 0
-    for it in candidates:
-        if published >= cfg["max_items_per_run"]:
-            break
-        link = it["link"]
-        try:
-            resp = requests.get(link, timeout=20, headers={"User-Agent": "Mozilla/5.0"}, allow_redirects=True)
-            resp.raise_for_status()
-            html = resp.text
-            final_url = str(resp.url)
-        except Exception as e:
-            print(f"⚠️ فشل فتح مقال — {cfg['name']}: {e}")
-            seen.add(link)
-            continue
-
-        meta = _web_extract_meta(html)
-        headline = meta.get("title") or it["title"]
-        description = meta.get("description")
-        image_url = meta.get("image")
-
-        # أهم شرط: لازم صورة + نص مع بعض، وإلا ما يُنشر إطلاقاً
-        if not image_url or not description:
-            print(f"⏭️  تم تجاهل مقال (ناقصه صورة أو نص) — {cfg['name']} — {final_url}")
-            seen.add(link)
-            continue
-
-        raw_text = f"{headline}\n\n{description}".strip()
-
-        if is_duplicate_content("web_asian_cup", raw_text):
-            print(f"⏭️  تم تجاهل مقال (تكرار من موقع ثاني لنفس الخبر) — {cfg['name']}")
-            seen.add(link)
-            continue
-
-        result = call_translate(raw_text, cfg["gemini_key"])
-        if not result["should_post"] or not result["text"].strip():
-            seen.add(link)
-            continue
-        final_text = result["text"].strip()
-
-        try:
-            img_resp = requests.get(image_url, timeout=20, headers={"User-Agent": "Mozilla/5.0"})
-            img_resp.raise_for_status()
-            img_bytes = img_resp.content
-        except Exception as e:
-            print(f"⚠️ فشل تحميل صورة المقال — {cfg['name']}: {e}")
-            seen.add(link)
-            continue
-
-        try:
-            await client.send_file(cfg["target"], img_bytes, caption=final_text)
-            print(f"✅ نُشر — {cfg['name']} — {headline[:60]}")
-            record_published_text("web_asian_cup", raw_text)
-            published += 1
-        except Exception as e:
-            print(f"❌ خطأ نشر مقال — {cfg['name']}: {e}")
-
-        seen.add(link)
-
-    state["web_seen_links"] = list(seen)[-cfg["max_seen_links"]:]
-    save_state(state)
-
-
 # ==================== التشغيل الرئيسي ====================
 # تشغيلة واحدة قصيرة: تتصل، تفحص كل قناة مرة واحدة، تحفظ الحالة، وتطفي.
 # لا يوجد أي استماع مباشر أو حلقة انتظار — هذا هو الفرق الجوهري عن النسخة السابقة.
@@ -964,12 +847,10 @@ async def main():
             await catch_up_channel(source_id)
         except Exception as e:
             print(f"❌ فشل فحص قناة كامل (تخطّي — البقية بتكمل): {cfg['name']} — {e}")
-
-    print("⏳ فحص — كأس آسيا (مواقع)")
-    try:
-        await process_web_channel()
-    except Exception as e:
-        print(f"❌ فشل قسم كأس آسيا كامل (تخطّي — ما يأثر على باقي القنوات): {e}")
+        # حفظ ورفع الحالة لـ GitHub بعد كل قناة (مو بس بنهاية التشغيلة) — لو صارت مشكلة
+        # أو انقطاع بمنتصف التشغيلة، القنوات اللي خلصت فعلاً تبقى حالتها محفوظة ومرفوعة،
+        # وما تنعاد نفس المنشورات بالتشغيلة الجاية (هذا كان سبب محتمل لتكرار بعض المنشورات)
+        commit_state()
 
     await client.disconnect()
     commit_state()
