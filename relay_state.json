@@ -4,7 +4,7 @@
   "-1001565832101": 5828,
   "-1001498073945": 3936,
   "-1001073231505": 75956,
-  "-1004443585067": 5285,
+  "-1004443585067": 5286,
   "-1001530089992": 61143,
   "-1003946450145": 606,
   "-1009003922419": 2120,
@@ -869,7 +869,6 @@
       "❗️the next major cyberattack may begin with a discovery like this it’s already started. the concern is that vulnerabilities now discussed in security reports and social media could eventually surface as breaches of critical infrastructure. japan’s prime minister has reportedly issued an urgent statement on the broader issue, although the context and exact wording need verification. the vulnerability list is alarming. two reported php flaws could allow unauthenticated remote code execution, while oracle access manager and oracle soa suite entries carry maximum cvss scores of 10.0. argo cd, node.js, juniper networking equipment and fortinet security software also appear on the list. some entries are described as actively exploited, including flaws affecting plex media server, siteguard and siemens software center. if confirmed, these would represent risks across web applications, enterprise systems, network infrastructure and industrial environments. php makes the potential reach especially significant. it powers a substantial share of websites worldwide, although the often-cited figure of 70% depends on the measurement method and does not mean 70% of sites are vulnerable. the bigger concern is the speed at which attackers may discover and exploit weaknesses across widely deployed software. ai could accelerate parts of that process, potentially shrinking the time defenders have to respond. the cve identifiers and claims above have not been independently verified, so they should not yet be treated as confirmed disclosures from today. source. 🏴 https://x.com/takaichi_sanae/status/2112890642590564386"
     ],
     "-1004443585067": [
-      "نهاية الشوط الاول مدريد 1-0 لايبزيج",
       "د47 مدريد",
       "كلوب بروج 1-0 لانس",
       "ريال بيتيس 1-0 فاينورد",
@@ -883,7 +882,8 @@
       "استون فيلا 3-1 فايكينج",
       "نهاية الماتش",
       "نهاية مباراة مدريد 4-1 لايبزيج",
-      "المباراه كاملة - الجزء الاول بايرن ميونيخ x أرسنال"
+      "المباراه كاملة - الجزء الاول بايرن ميونيخ x أرسنال",
+      "المباراه كاملة ريال مدريد x لايبزيج"
     ],
     "-1009001073232": [
       "🔴 وزارة التعليم تقرر تخفيض معدلات القبول لبعض التخصصات ضمن الدراسة المسائية في الجامعات الحكومية والأهلية. - وزارة التعليم تقرر تعديل تعليمات الامتحانات الجامعية رقم (11) لسنة 2026.",
