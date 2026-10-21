@@ -4,11 +4,11 @@
   "-1001565832101": 5827,
   "-1001498073945": 3936,
   "-1001073231505": 75956,
-  "-1004443585067": 5224,
+  "-1004443585067": 5218,
   "-1001530089992": 61143,
   "-1003946450145": 606,
   "-1009003922419": 2120,
-  "-1009001073232": 170944,
+  "-1009001073232": 170943,
   "-1009001498074": 15257,
   "-1009917651232": 4280,
   "-1009001498075": 8563,
@@ -869,6 +869,7 @@
       "❗️the next major cyberattack may begin with a discovery like this it’s already started. the concern is that vulnerabilities now discussed in security reports and social media could eventually surface as breaches of critical infrastructure. japan’s prime minister has reportedly issued an urgent statement on the broader issue, although the context and exact wording need verification. the vulnerability list is alarming. two reported php flaws could allow unauthenticated remote code execution, while oracle access manager and oracle soa suite entries carry maximum cvss scores of 10.0. argo cd, node.js, juniper networking equipment and fortinet security software also appear on the list. some entries are described as actively exploited, including flaws affecting plex media server, siteguard and siemens software center. if confirmed, these would represent risks across web applications, enterprise systems, network infrastructure and industrial environments. php makes the potential reach especially significant. it powers a substantial share of websites worldwide, although the often-cited figure of 70% depends on the measurement method and does not mean 70% of sites are vulnerable. the bigger concern is the speed at which attackers may discover and exploit weaknesses across widely deployed software. ai could accelerate parts of that process, potentially shrinking the time defenders have to respond. the cve identifiers and claims above have not been independently verified, so they should not yet be treated as confirmed disclosures from today. source. 🏴 https://x.com/takaichi_sanae/status/2112890642590564386"
     ],
     "-1004443585067": [
+      "3-4",
       "نابولي 4-2 بودو جليمت",
       "نهاية مباراة برشلونه 2-4 باريس",
       "1-0",
@@ -882,10 +883,10 @@
       "استون فيلا 1-0 فايكينج",
       "1-0 ارسنال",
       "ة",
-      "د28 مدريد",
-      "1-1"
+      "د28 مدريد"
     ],
     "-1009001073232": [
+      "🔴 الزيدي للفاسدين: أمركم أصبح في محكمة السماء. 🔴 الزيدي يطمئن العراقيين: \"بعد ماكو مسؤول يجي للدولة حتى يبوگ\".",
       "🔴 دليل الجامعات والكليات الأهلية وآلية التقديم على الجامعات والكليات الأهلية ⬇️ 🔹دليل الجامعات والكليات الأهلية: https://cent.mohesr.gov.iq/ahly2026v3.pdf 🔹آلية التقديم: https://youtu.be/zhjf7ifnado",
       "🔴 مصدران سياسيان وكالة فرانس برس: الولايات المتحدة تضغط على الحكومة العراقية لإغلاق كلّ المعابر الحدودية مع إيران، من أجل تضييق الخناق على طهران.",
       "🔴 نتنياهو: مجتبى خامنئي قرر رفع التحريم، وإيران تطور قنبلة نووية.",
@@ -899,8 +900,7 @@
       "🔴 وكالة فارس: دوي عدة انفجارات في منطقة كربان بمقاطعة سيريك جنوبي إيران.",
       "🔴 هطول الامطار فوق قُبَّةُ الإمام الحُسَيْنِ (عليه السلام).. جَمالٌ تَعجِزُ العِباراتُ عَنْ وَصْفِهِ.",
       "🔴 بالفيديو | هطول امطار غزيرة على النجف الاشرف.",
-      "🔴 الأنواء الجوية: سحب ركامية رعدية وأمطار متوقعة حتى صباح غداً.",
-      "🔴 أكسيوس: نتنياهو وترامب ناقشا مطلع تشرين الاول شن عملية عسكرية واسعة ضد إيران قبل الانتخابات."
+      "🔴 الأنواء الجوية: سحب ركامية رعدية وأمطار متوقعة حتى صباح غداً."
     ],
     "-1001530089992": [
       "🔴 التربية تحدد موعد التقديم على الانتساب لطلبة معاهد الفنون الجميلة للعام الدراسي 2026–2027",
@@ -965,21 +965,21 @@
       "man says he was fired after leaking gta 6 ads worth $4 million a man says he was fired from a job after leaking adverts for grand theft auto 6 on miami beach, but he “understands” why."
     ],
     "-1009003922421": [
-      "🔵 مرتدة للبايرن",
-      "فيني يتقدم",
-      "يراوغ وتسديدة جميلة",
-      "عرضية تقطع للركنية",
-      "🔵 مرت نصف ساعة والارسنال متقدم",
-      "سهلة عند الحارس",
-      "🔵 هل من عودة للبايرن؟",
-      "لايبزيغ يهجم",
-      "فيني قطعها",
-      "🔵 تماس للبايرن",
-      "عرضية لكن الدفاع يغطي",
-      "فالفيردي",
       "نوسا يحاول يرواغ",
       "تسديدة بالدفاع",
-      "🔵 هدف التعادل للبايرن"
+      "🔵 هدف التعادل للبايرن",
+      "عرضية تقطع من مدريد",
+      "تمريرات بين مدريد",
+      "مبابي بالكعب لكن تقطع",
+      "🛑 ركلة جزاء لأستون فيلا",
+      "لايبزيغ يحاول",
+      "خطأ لنوسا",
+      "🛑 الهدف الثاني لأستون فيلا على فايكينج من ركلة جزاء ⚽ ايميليانو بوينديا",
+      "راوغ فالفيردي وكسره",
+      "🔵 هجمة للارسنال",
+      "عرضية تقطع",
+      "مستمرة عند لايبزيغ",
+      "يعودون للخلف"
     ]
   },
   "web_seen_links": [
@@ -1484,5 +1484,5 @@
     "https://news.google.com/rss/articles/CBMiU0FVX3lxTE90bms0eUdPMEpZN2x0WTdzWmV3N2tUSzdXb01wN21UcGdwSnNuYlpjVFVLVDR4bzBaUjNTSWRNQnhJODJNQU5OTXJmWTBwQU5DS1Vr?oc=5",
     "https://news.google.com/rss/articles/CBMiywFBVV95cUxOQ05fRUd0VzJYMVZZdW8td21OVmF1b1RRdkRhWTFKMEJsbHlhcy05eDNtMnBaVUJwR1JFb1pFaFRUY0hQWTBhRU9HQ1R5UHliNThDbEx0VDNSVDMtVzZQVFZRb0theUgwYUQzZlE1eDJ3anRCNWhYaEhBNXplSllMSzZ4djRBNE5nVllweUN0TTZDVVVuQzBObDZCRkdzcWFuem9EOUVub0lOU2owTjdSNnFmRDFLN09nTE9rVVRBanhnWXZjb0xoUUNzaw?oc=5"
   ],
-  "-1009003922421": 256843
+  "-1009003922421": 256855
 }
