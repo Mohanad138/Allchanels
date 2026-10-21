@@ -4,11 +4,11 @@
   "-1001565832101": 5828,
   "-1001498073945": 3936,
   "-1001073231505": 75956,
-  "-1004443585067": 5285,
+  "-1004443585067": 5282,
   "-1001530089992": 61143,
   "-1003946450145": 606,
   "-1009003922419": 2120,
-  "-1009001073232": 170951,
+  "-1009001073232": 170950,
   "-1009001498074": 15257,
   "-1009917651232": 4280,
   "-1009001498075": 8564,
@@ -869,6 +869,8 @@
       "❗️the next major cyberattack may begin with a discovery like this it’s already started. the concern is that vulnerabilities now discussed in security reports and social media could eventually surface as breaches of critical infrastructure. japan’s prime minister has reportedly issued an urgent statement on the broader issue, although the context and exact wording need verification. the vulnerability list is alarming. two reported php flaws could allow unauthenticated remote code execution, while oracle access manager and oracle soa suite entries carry maximum cvss scores of 10.0. argo cd, node.js, juniper networking equipment and fortinet security software also appear on the list. some entries are described as actively exploited, including flaws affecting plex media server, siteguard and siemens software center. if confirmed, these would represent risks across web applications, enterprise systems, network infrastructure and industrial environments. php makes the potential reach especially significant. it powers a substantial share of websites worldwide, although the often-cited figure of 70% depends on the measurement method and does not mean 70% of sites are vulnerable. the bigger concern is the speed at which attackers may discover and exploit weaknesses across widely deployed software. ai could accelerate parts of that process, potentially shrinking the time defenders have to respond. the cve identifiers and claims above have not been independently verified, so they should not yet be treated as confirmed disclosures from today. source. 🏴 https://x.com/takaichi_sanae/status/2112890642590564386"
     ],
     "-1004443585067": [
+      "1-0 مدريد",
+      "هدف مدريد جودة ثابته",
       "نهاية الشوط الاول مدريد 1-0 لايبزيج",
       "د47 مدريد",
       "كلوب بروج 1-0 لانس",
@@ -881,11 +883,10 @@
       "1-3 لايبزيج",
       "4-1 مدريد",
       "استون فيلا 3-1 فايكينج",
-      "نهاية الماتش",
-      "نهاية مباراة مدريد 4-1 لايبزيج",
-      "المباراه كاملة - الجزء الاول بايرن ميونيخ x أرسنال"
+      "نهاية الماتش"
     ],
     "-1009001073232": [
+      "🔴 هيئة الرأي في وزارة التعليم توافق على دعوة الطالبات الأذربيجانيات المحجبات إلى الدراسة في الجامعات العراقية ضمن قنوات القبول الدراسي ومبادرة ادرس في العراق المعتمدة بما فيها قناة المنحة المجانية.",
       "🔴 وزارة التعليم تقرر تخفيض معدلات القبول لبعض التخصصات ضمن الدراسة المسائية في الجامعات الحكومية والأهلية. - وزارة التعليم تقرر تعديل تعليمات الامتحانات الجامعية رقم (11) لسنة 2026.",
       "🔴 وزارة التعليم تقرر منح مجالس الجامعات صلاحية البت في طلبات النقل والاستضافة على وفق الضوابط المعتمدة. - منح مجالس الجامعات صلاحية معالجة الحالات الحرجة للعام الدراسي (2026-2027) وبما لا يزيد على درجة واحدة.",
       "🔴 شرطة الرصافة تلقي القبض على متهم ابتز امرأة وهددها بنشر صورها الخاصة مقابل المال.",
@@ -899,8 +900,7 @@
       "🔴 البحرية العراقية ترصد طائرتين مسيرتين في المياه الإقليمية العراقية قرب ناقلة ترفع علم بنما.",
       "🔴 بالفيديو | هطول أمطار غزيرة في قضاء بدرة بمحافظة واسط.",
       "🔴 النائب \"محمد البياتي\": - الموازنة قد تصل خلال شهر تشرين الثاني المقبل، لكن تأخيرها لما بعد هذا الأمر وارد جداً. - الموازنة ستتضمن سبع نقاط مهمة تتعلق بحقوق شرائح متعددة، إضافة إلى حقوق المحافظات، ناهيك عن رسم خارطة موضوعية لإدارة الأموال.",
-      "🔴 مسؤول أمني إيراني: إيران تتوقع هجوم من الولايات المتحدة وإسرائيل.",
-      "🔴 ريال مدريد يتغلب على لايبزيغ 4-1 في دوري أبطال أوروبا."
+      "🔴 مسؤول أمني إيراني: إيران تتوقع هجوم من الولايات المتحدة وإسرائيل."
     ],
     "-1001530089992": [
       "🔴 التربية تحدد موعد التقديم على الانتساب لطلبة معاهد الفنون الجميلة للعام الدراسي 2026–2027",
@@ -965,8 +965,6 @@
       "man says he was fired after leaking gta 6 ads worth $4 million a man says he was fired from a job after leaking adverts for grand theft auto 6 on miami beach, but he “understands” why."
     ],
     "-1009003922421": [
-      "🔵 هجمة للارسنال",
-      "🔵 دقيقتان على الوقت البدل الضائع",
       "🛑 الهدف الرابع ريال مدريد ⚽️ ديوماندي 🅰️ دياز",
       "دخول اسبي واندريك خروج مبابي وبيلي",
       "هجمة مدريد",
@@ -978,8 +976,10 @@
       "+3 بدل ضائع",
       "🔵 ركنية للارسنال",
       "🛑 التعادل سيد الموقف.... نهاية المباراة بتعادل الايجابي بين ارسنال و بايرن موينخ",
-      "كادت من اندريك",
-      "ركنية اخيرة"
+      "🛑 ريال الابطال... نهاية المباراة بفوز ريال مدريد على لايبزيغ بأربعة اهداف مقابل هدف واحد",
+      "🛑 رجل المباراة: كيليان مبابي 🔻 رجل المباراة: الأمير هاري كين",
+      "🛑 نتائج مباريات اليوم بعد نهاية الجولة الثالثة من دوري الابطال.",
+      "🛑 هدف بيرناردو ضد لايبزيغ هو أول هدف من لاعب برتغالي بقميص ريال مدريد منذ كريستيانو رونالدو 19 مارس، 2018."
     ]
   },
   "web_seen_links": [
@@ -1484,5 +1484,5 @@
     "https://news.google.com/rss/articles/CBMiU0FVX3lxTE90bms0eUdPMEpZN2x0WTdzWmV3N2tUSzdXb01wN21UcGdwSnNuYlpjVFVLVDR4bzBaUjNTSWRNQnhJODJNQU5OTXJmWTBwQU5DS1Vr?oc=5",
     "https://news.google.com/rss/articles/CBMiywFBVV95cUxOQ05fRUd0VzJYMVZZdW8td21OVmF1b1RRdkRhWTFKMEJsbHlhcy05eDNtMnBaVUJwR1JFb1pFaFRUY0hQWTBhRU9HQ1R5UHliNThDbEx0VDNSVDMtVzZQVFZRb0theUgwYUQzZlE1eDJ3anRCNWhYaEhBNXplSllMSzZ4djRBNE5nVllweUN0TTZDVVVuQzBObDZCRkdzcWFuem9EOUVub0lOU2owTjdSNnFmRDFLN09nTE9rVVRBanhnWXZjb0xoUUNzaw?oc=5"
   ],
-  "-1009003922421": 257095
+  "-1009003922421": 257100
 }
