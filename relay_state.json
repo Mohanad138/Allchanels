@@ -4,7 +4,7 @@
   "-1001565832101": 5828,
   "-1001498073945": 3936,
   "-1001073231505": 75956,
-  "-1004443585067": 5240,
+  "-1004443585067": 5237,
   "-1001530089992": 61143,
   "-1003946450145": 606,
   "-1009003922419": 2120,
@@ -869,6 +869,7 @@
       "❗️the next major cyberattack may begin with a discovery like this it’s already started. the concern is that vulnerabilities now discussed in security reports and social media could eventually surface as breaches of critical infrastructure. japan’s prime minister has reportedly issued an urgent statement on the broader issue, although the context and exact wording need verification. the vulnerability list is alarming. two reported php flaws could allow unauthenticated remote code execution, while oracle access manager and oracle soa suite entries carry maximum cvss scores of 10.0. argo cd, node.js, juniper networking equipment and fortinet security software also appear on the list. some entries are described as actively exploited, including flaws affecting plex media server, siteguard and siemens software center. if confirmed, these would represent risks across web applications, enterprise systems, network infrastructure and industrial environments. php makes the potential reach especially significant. it powers a substantial share of websites worldwide, although the often-cited figure of 70% depends on the measurement method and does not mean 70% of sites are vulnerable. the bigger concern is the speed at which attackers may discover and exploit weaknesses across widely deployed software. ai could accelerate parts of that process, potentially shrinking the time defenders have to respond. the cve identifiers and claims above have not been independently verified, so they should not yet be treated as confirmed disclosures from today. source. 🏴 https://x.com/takaichi_sanae/status/2112890642590564386"
     ],
     "-1004443585067": [
+      "2-0",
       "3-0",
       "4-0",
       "4-1",
@@ -882,8 +883,7 @@
       "1-1",
       "1-0 مدريد",
       "هدف مدريد جودة ثابته",
-      "نهاية الشوط الاول مدريد 1-0 لايبزيج",
-      "د47 مدريد"
+      "نهاية الشوط الاول مدريد 1-0 لايبزيج"
     ],
     "-1009001073232": [
       "🔴 عاصفة رعدية تضرب العاصمة بغداد الان.",
@@ -965,12 +965,6 @@
       "man says he was fired after leaking gta 6 ads worth $4 million a man says he was fired from a job after leaking adverts for grand theft auto 6 on miami beach, but he “understands” why."
     ],
     "-1009003922421": [
-      "تسديدة كادت",
-      "الحارس يتصدى",
-      "فيني يحاول العودة للمستوى",
-      "ركنية مدريد",
-      "🔵 تسديدة من غنابري ترتطم برأس غابرييل",
-      "تبعد",
       "دقيقة واحدة اضافية",
       "عرضية اخرى تبعد",
       "🔵 نهاية الشوط الاول",
@@ -979,7 +973,13 @@
       "🔵 بداية الشوط الثاني",
       "عودة اللاعبين للملعب",
       "🛑 بداية الشوط الثاني للمباريات بالتتبع",
-      "🔵 يلغى"
+      "🔵 هجمة للارسنال",
+      "هجمة مدريدية",
+      "خطيرة بجانب المرمى",
+      "حارس المرمى تألق بالتصدي",
+      "تعود لمدريد",
+      "لايبزيغ ينطلق",
+      "تتحول مرتدة مدريد"
     ]
   },
   "web_seen_links": [
@@ -1484,5 +1484,5 @@
     "https://news.google.com/rss/articles/CBMiU0FVX3lxTE90bms0eUdPMEpZN2x0WTdzWmV3N2tUSzdXb01wN21UcGdwSnNuYlpjVFVLVDR4bzBaUjNTSWRNQnhJODJNQU5OTXJmWTBwQU5DS1Vr?oc=5",
     "https://news.google.com/rss/articles/CBMiywFBVV95cUxOQ05fRUd0VzJYMVZZdW8td21OVmF1b1RRdkRhWTFKMEJsbHlhcy05eDNtMnBaVUJwR1JFb1pFaFRUY0hQWTBhRU9HQ1R5UHliNThDbEx0VDNSVDMtVzZQVFZRb0theUgwYUQzZlE1eDJ3anRCNWhYaEhBNXplSllMSzZ4djRBNE5nVllweUN0TTZDVVVuQzBObDZCRkdzcWFuem9EOUVub0lOU2owTjdSNnFmRDFLN09nTE9rVVRBanhnWXZjb0xoUUNzaw?oc=5"
   ],
-  "-1009003922421": 256921
+  "-1009003922421": 256928
 }
