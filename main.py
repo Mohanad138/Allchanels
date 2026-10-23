@@ -82,14 +82,16 @@ CHANNELS = {
         "add_link": True,
         "link": "https://t.me/ShakoMakoKirkuk",
     },
-    -1009001498075: {
-        "name": "الذكاء الاصطناعي",
-        "target": "@AInewsAR1",
-        "mode": "translate_en_ar",
+    -1009001498076: {
+        "name": "الانترنت المجاني في العراق",
+        "target": "@FreeNet24IQ",
+        "mode": "rephrase_ar",
         "gemini_key": GEMINI_KEY_TECH,
-        "source_username": "@aipost",
+        "source_username": "@Free_Neet10",
         "add_link": True,
-        "link": "@AInewsAR1",
+        "link": "@FreeNet24IQ",
+        "extra_rules": "أعد صياغة النص بشكل متناسق وبسيط وواضح، بدون حذف أي معلومة فعلية "
+                       "(أسماء باقات، أسعار، خطوات، إلخ).",
     },
     -1009001073232: {
         "name": "العراق الآن",
@@ -117,7 +119,11 @@ CHANNELS = {
         "source_username": "@eduiq23",
         "add_link": True,
         "link": "https://t.me/TalibLib",
-        "topic_filter": "أخبار ومعلومات تخص الطلبة والدراسة والتعليم فقط",
+        "topic_filter": "أخبار ومعلومات تخص الطلبة والدراسة والتعليم فقط، وتفيد الطالب فعلاً — "
+                        "نتائج، تعليمات، مواعيد، قبول، منح، إلخ. إذا كان المنشور رسالة محوّلة "
+                        "(Forwarded) من قناة ثانية ومحتواها لا يحمل خبر أو معلومة حقيقية تفيد "
+                        "الطالب (مجرد ترويج، دردشة، محتوى عام بلا فائدة تعليمية مباشرة)، اعتبرها "
+                        "غير متعلقة (is_relevant=false) حتى لو ذُكرت كلمة متعلقة بالدراسة عرضياً.",
         "link_after_share_phrase": True,
     },
     -1009003946451: {
