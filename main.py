@@ -228,31 +228,43 @@ def _message_has_any_video(m):
     لأن فيديو معاينة الرابط ما نقدر ننشره، لكن لازم نعرف بوجوده عشان نستبعد المنشور."""
     media = m.media
     if isinstance(media, MessageMediaDocument):
-        return bool(m.video)
+        return bool(m.video) or bool(getattr(m, "gif", None))
     if isinstance(media, MessageMediaWebPage):
         wp = getattr(media, "webpage", None)
         if wp is None:
             return False
-        if getattr(wp, "type", None) == "video":
+        # "duration" يتحط من تيليجرام لأي تضمين قابل للتشغيل (فيديو/صوت) بغض النظر عن
+        # المصدر (تويتر/X، تيك توك، يوتيوب، إلخ) — أوثق إشارة عامة من فحص "type" النصي وحده
+        if getattr(wp, "duration", None):
+            return True
+        wtype = str(getattr(wp, "type", "") or "").lower()
+        if "video" in wtype or "gif" in wtype:
             return True
         doc = getattr(wp, "document", None)
-        if doc is not None and str(getattr(doc, "mime_type", "")).startswith("video/"):
+        if doc is not None and str(getattr(doc, "mime_type", "")).startswith(("video/", "image/gif")):
             return True
     return False
 
 
-def _is_usable_media_msg(m):
-    """هل هذي الرسالة فيها وسائط حقيقية تستاهل تُنشر؟ يستثني صور معاينة الرابط الصغيرة
-    (أفاتار حساب بمعاينة تغريدة مقتبسة) بس يبقي الصور الحقيقية حتى لو جايه من نفس آلية
-    المعاينة (زي صورة لاعب مرفقة بتغريدة أصلية)."""
+def _is_usable_media_msg(m, avatar_photo_ids=None):
+    """هل هذي الرسالة فيها وسائط حقيقية تستاهل تُنشر؟ يستثني صورة أفاتار حساب المصدر
+    (لمّا تطلع كـ'صورة معاينة' بتغريدة نصية بدون صورة حقيقية) — أولاً بمطابقة id الصورة
+    بالضبط مع صور حساب المصدر (دقيق 100%)، وثانياً كاحتياط بفحص الأبعاد لو المطابقة
+    بالـ id ما قدرت تتأكد (مثلاً فشل جلب صور الحساب)."""
+    avatar_photo_ids = avatar_photo_ids or set()
     media = m.media
     if isinstance(media, (MessageMediaPhoto, MessageMediaDocument)):
         return True
     if isinstance(media, MessageMediaWebPage):
         wp = getattr(media, "webpage", None)
         photo = getattr(wp, "photo", None)
-        if photo and not _is_small_thumbnail_photo(photo):
-            return True
+        if not photo:
+            return False
+        if getattr(photo, "id", None) in avatar_photo_ids:
+            return False
+        if _is_small_thumbnail_photo(photo):
+            return False
+        return True
     return False
 
 
@@ -588,13 +600,18 @@ def call_fabrizio(text, api_key):
   إحصائيات، تصريحات، فيديوهات، أو أي خبر آخر مهما كان صغيراً أو هامشياً.
 - الاستثناء الوحيد: إذا كان النص إعلاناً مدفوعاً أو محتوى ترويجياً تجارياً صريحاً (منتج، تطبيق، خدمة،
   رعاية مدفوعة) — عندها فقط اجعل should_post = false. أي خبر رياضي حقيقي ليس إعلاناً.
-- استثناء ثاني: منشورات الترويج لبودكاست/برنامج فابريزيو نفسه (زي "New pod on"، ترويج لحلقة
-  يوتيوب/بودكاست، دعوة للاستماع) تُعتبر ترويج ذاتي لمحتواه مو خبر مباشر — اجعلها should_post = false،
-  حتى لو ذكرت أسماء لاعبين بشكل عابر ("talks"، "more to follow" بدون تفاصيل فعلية).
-- استثناء ثالث: منشورات اللي جوهرها مقطع فيديو قصير مرفق من تويتر/X (لقطة، تكريم، هايلايت، "Watch:")
-  وما فيها خبر مكتوب فعلي غير جملة قصيرة وصفية — اجعلها should_post = false. السبب: الفيديو المرفق
-  عبارة عن معاينة رابط من X مو ملف تيليجرام حقيقي، والبوت ما يقدر ينشره، فينزل منشور فاضي بلا فائدة.
-- أي منشور يحتوي على عبارة "Here we go" يُنشر دائماً بلا استثناء (حتى لو جاء ضمن منشور بودكاست أو فيديو).
+- استثناء ثاني: منشورات الترويج لبودكاست/برنامج فابريزيو نفسه تحديداً (زي "New pod on"، ترويج
+  صريح لحلقة بودكاست مع دعوة للاستماع) — اجعلها should_post = false. هذا الاستثناء ضيق جداً:
+  لا تطبّقه على أي منشور إخباري عادي حتى لو كان قصير أو بأسلوب حماسي/بالأحرف الكبيرة.
+- **لا يوجد استثناء ثالث لـ"الفيديو"** — قرار الفيديو يُتخذ بشكل منفصل بالكود، مو من عندك، فلا
+  تجعل should_post = false بسبب ظنّك إن المنشور "أسلوبه فيديو" أو "مختصر جداً". خبر قصير حقيقي
+  (زي إعلان فوز بجائزة، أو نتيجة مباراة) يبقى should_post = true دايماً.
+- **أخبار الجوائز الفردية دايماً تُنشر**: أي خبر عن الكرة الذهبية (Ballon d'Or)، أفضل لاعب، أو أي
+  جائزة فردية — فوز، ترشيح، توقع، تحليل — يُعتبر خبر حقيقي مهم ويُنشر should_post = true، حتى لو
+  كان النص قصير أو بصيغة "BREAKING" أو بأحرف كبيرة بالكامل.
+- **الافتراضي العام: should_post = true.** الاستثناءين فوق (إعلان تجاري، ترويج بودكاست ذاتي) هم
+  الوحيدين. أي خبر رياضي عادي — مهما كان قصير، هامشي، أو حماسي الأسلوب — يُنشر.
+- أي منشور يحتوي على عبارة "Here we go" يُنشر دائماً بلا استثناء.
 
 الترجمة (فقط إذا should_post = true):
 - **ممنوع الترجمة الحرفية كلمة-بكلمة.** أعد صياغة الخبر بالكامل بأسلوب محرر رياضي عربي محترف
@@ -671,7 +688,7 @@ async def apply_processing(config, text):
 
 # ==================== معالجة ونشر دفعة رسائل (منشور مفرد أو ألبوم) ====================
 
-async def process_batch(source_id, messages):
+async def process_batch(source_id, messages, avatar_photo_ids=None):
     config = CHANNELS.get(source_id)
     if not config:
         return
@@ -711,7 +728,7 @@ async def process_batch(source_id, messages):
     # نتحقق من نوع الوسائط الفعلي (MessageMediaPhoto/Document حقيقي) بدل الخاصية العامة
     # m.photo/m.video، لأن تيليثون أحياناً يرجّع صورة "معاينة الرابط" (thumbnail لمعاينة
     # تغريدة مقتبسة) على إنها صورة حقيقية بالمنشور — وهذا يخلي البوت ينشرها غلط وكأنها محتوى.
-    media_msgs = [m for m in messages if _is_usable_media_msg(m)]
+    media_msgs = [m for m in messages if _is_usable_media_msg(m, avatar_photo_ids)]
 
     force_post_here_we_go = bool(re.search(r'here\s*we\s*go', raw_text, re.IGNORECASE))
 
@@ -802,11 +819,27 @@ async def process_batch(source_id, messages):
 
 # ==================== معالجة الرسائل الفائتة (بولينغ) ====================
 
+async def _get_avatar_photo_ids(entity_ref):
+    """يجيب أرقام تعريف (id) صور حساب المصدر الشخصية (الحالية والسابقة) — تُستخدم لاستبعاد
+    صورة الأفاتار لمّا تطلع كـ'صورة معاينة' بتغريدة نصية بدون صورة حقيقية. مقارنة بالـ id
+    دقيقة 100% (مو تخمين بالأبعاد) لأنها نفس الملف بالضبط بغض النظر عن دقته."""
+    ids = set()
+    try:
+        photos = await client.get_profile_photos(entity_ref, limit=5)
+        for p in photos:
+            if hasattr(p, "id"):
+                ids.add(p.id)
+    except Exception as e:
+        print(f"⚠️ تعذر جلب صور حساب المصدر (فلترة الأفاتار ستعتمد على الأبعاد بس): {e}")
+    return ids
+
+
 async def catch_up_channel(source_id):
     config = CHANNELS.get(source_id, {})
     # استخدم اليوزرنيم العام إذا موجود — يتحل حتى لو الحساب مو منضم للقناة.
     # الـ ID الرقمي وحده يفشل أحياناً لو الحساب ما "شاف" القناة من قبل (access_hash غير محفوظ).
     entity_ref = config.get("source_username") or source_id
+    avatar_photo_ids = await _get_avatar_photo_ids(entity_ref)
 
     key = str(source_id)
     last_id = state.get(key, 0)
@@ -829,11 +862,11 @@ async def catch_up_channel(source_id):
         if msg.grouped_id:
             group = [m for m in messages if m.grouped_id == msg.grouped_id]
             group.sort(key=lambda m: m.id)
-            await process_batch(source_id, group)
+            await process_batch(source_id, group, avatar_photo_ids)
             new_last = group[-1].id
             i += len(group)
         else:
-            await process_batch(source_id, [msg])
+            await process_batch(source_id, [msg], avatar_photo_ids)
             new_last = msg.id
             i += 1
         state[key] = new_last
