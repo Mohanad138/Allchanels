@@ -62,6 +62,7 @@ CHANNELS = {
         "source_username": "@FabrizioRomanoTG",
         "skip_if_video": True,
         "skip_if_youtube": True,
+        "skip_if_play_button": True,
     },
     -1009003922421: {
         "name": "كأس آسيا",
@@ -463,6 +464,58 @@ def call_gemini_vision(image_path, api_key, max_retries=3):
     return {"has_text": False, "caption": ""}
 
 
+def check_image_has_play_button(image_path, api_key, max_retries=3):
+    """يفحص صورة بالذكاء الاصطناعي: هل عليها زر تشغيل فيديو (▶ مثلث داخل دائرة/مربع غالباً
+    بمنتصف الصورة)؟ يعني الصورة هي غلاف فيديو مو صورة خبر حقيقية. يرجع True فقط لو متأكد؛
+    عند أي خطأ تقني يرجع False (ننشر بدل ما نفقد منشور صحيح بسبب خطأ فحص)."""
+    if not api_key:
+        return False
+    try:
+        import base64
+        with open(image_path, "rb") as f:
+            img_b64 = base64.b64encode(f.read()).decode()
+    except Exception:
+        return False
+
+    ext = image_path.lower().rsplit(".", 1)[-1]
+    mime = "image/png" if ext == "png" else "image/jpeg"
+    prompt = """هل يوجد في هذه الصورة زر تشغيل فيديو (رمز مثلث ▶ غالباً داخل دائرة أو مربع شبه شفاف،
+عادة بمنتصف الصورة) يدل إن الصورة هي غلاف/معاينة لفيديو؟
+- إذا نعم اجعل has_play_button=true.
+- إذا الصورة عادية بدون أي زر تشغيل (حتى لو فيها شخص أو نص) اجعلها false.
+
+أعد النتيجة بصيغة JSON فقط: {"has_play_button": true/false}"""
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
+    headers = {"x-goog-api-key": api_key, "Content-Type": "application/json"}
+    body = {"contents": [{"parts": [
+        {"inline_data": {"mime_type": mime, "data": img_b64}},
+        {"text": prompt},
+    ]}]}
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            resp = requests.post(url, json=body, headers=headers, timeout=30)
+            if resp.status_code in (429, 500, 502, 503, 504) and attempt < max_retries:
+                time.sleep(2 ** attempt)
+                continue
+            resp.raise_for_status()
+            data = resp.json()
+            raw = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+            if raw.startswith("```"):
+                raw = raw.strip("`").strip()
+                if raw.lower().startswith("json"):
+                    raw = raw[4:].strip()
+            return bool(json.loads(raw).get("has_play_button", False))
+        except Exception as e:
+            if attempt < max_retries:
+                time.sleep(2 ** attempt)
+                continue
+            print(f"⚠️ خطأ فحص زر التشغيل بالصورة: {e}")
+            return False
+    return False
+
+
 def check_is_ad(text, api_key):
     prompt = f"""حدد فقط إذا كان النص التالي إعلاناً مدفوعاً أو محتوى ترويجياً تجارياً.
 اعتبره إعلاناً (is_ad=true) لو فيه أي من هذي العلامات:
@@ -597,23 +650,26 @@ https://t.me/+5hBOma9vTGo4MWRk
 def call_fabrizio(text, api_key):
     prompt = f"""أنت محرر لصفحة عربية تنقل كل منشورات حساب فابريزيو رومانو الرسمي بالعربية.
 
-معايير النشر:
-- انشر كل منشور يصلك (should_post = true) بلا استثناء — انتقالات، صفقات، تجديد عقود، تغطية مباراة،
-  إحصائيات، تصريحات، فيديوهات، أو أي خبر آخر مهما كان صغيراً أو هامشياً.
-- الاستثناء الوحيد: إذا كان النص إعلاناً مدفوعاً أو محتوى ترويجياً تجارياً صريحاً (منتج، تطبيق، خدمة،
-  رعاية مدفوعة) — عندها فقط اجعل should_post = false. أي خبر رياضي حقيقي ليس إعلاناً.
-- استثناء ثاني: منشورات الترويج لبودكاست/برنامج فابريزيو نفسه تحديداً (زي "New pod on"، ترويج
-  صريح لحلقة بودكاست مع دعوة للاستماع) — اجعلها should_post = false. هذا الاستثناء ضيق جداً:
-  لا تطبّقه على أي منشور إخباري عادي حتى لو كان قصير أو بأسلوب حماسي/بالأحرف الكبيرة.
-- **لا يوجد استثناء ثالث لـ"الفيديو"** — قرار الفيديو يُتخذ بشكل منفصل بالكود، مو من عندك، فلا
-  تجعل should_post = false بسبب ظنّك إن المنشور "أسلوبه فيديو" أو "مختصر جداً". خبر قصير حقيقي
-  (زي إعلان فوز بجائزة، أو نتيجة مباراة) يبقى should_post = true دايماً.
-- **أخبار الجوائز الفردية دايماً تُنشر**: أي خبر عن الكرة الذهبية (Ballon d'Or)، أفضل لاعب، أو أي
-  جائزة فردية — فوز، ترشيح، توقع، تحليل — يُعتبر خبر حقيقي مهم ويُنشر should_post = true، حتى لو
-  كان النص قصير أو بصيغة "BREAKING" أو بأحرف كبيرة بالكامل.
-- **الافتراضي العام: should_post = true.** الاستثناءين فوق (إعلان تجاري، ترويج بودكاست ذاتي) هم
-  الوحيدين. أي خبر رياضي عادي — مهما كان قصير، هامشي، أو حماسي الأسلوب — يُنشر.
+معايير النشر (فلتر معتدل — مو صارم ومو مفتوح بالكامل):
+- انشر (should_post = true) أي منشور فيه **معلومة كروية ملموسة وجديدة** عن لاعب أو مدرب أو نادي محدد:
+  انتقال أو صفقة أو تجديد عقد (مع مرحلة واضحة: مفاوضات متقدمة، اتفاق، رسمي)، إصابة أو غياب لاعب مهم،
+  تشكيلة أو نتيجة مباراة أو حدث مهم بمباراة، قرار أو إعلان رسمي، تصريح له قيمة إخبارية فعلية،
+  إحصائية لافتة، أو تغيير مدرب/إدارة.
+- **أخبار الجوائز الفردية دايماً تُنشر**: الكرة الذهبية (Ballon d'Or)، أفضل لاعب، أي جائزة فردية —
+  فوز، ترشيح، توقع، تحليل — حتى لو كان النص قصير أو بصيغة "BREAKING" أو بأحرف كبيرة.
 - أي منشور يحتوي على عبارة "Here we go" يُنشر دائماً بلا استثناء.
+- اجعل should_post = false للأنواع التالية فقط (هامشية أو بلا قيمة إخبارية):
+  * إعلان تجاري مدفوع أو ترويج لمنتج/تطبيق/خدمة/رعاية.
+  * ترويج لبودكاست/برنامج فابريزيو نفسه (زي "New pod on"، دعوة للاستماع).
+  * تشويق بلا معلومة فعلية ("more to follow"، "big news coming"، "talks ongoing" بدون أي تفصيل
+    أو مرحلة أو اسم محدد).
+  * منشورات تفاعلية/ترفيهية بلا خبر: تهنئة، عيد ميلاد، احتفال، ردود فعل جماهير، دردشة، طرائف.
+  * رأي أو تحليل عام بلا حقيقة جديدة، أو تكرار لمعلومة معروفة سبق نشرها بدون أي جديد.
+  * أي محتوى بعيد عن كرة القدم أو شخصي.
+- قرار الفيديو والصور يتخذ بشكل منفصل بالكود، مو من عندك — لا تجعل should_post = false بسبب إن
+  المنشور "يشبه فيديو" أو قصير. خبر قصير حقيقي (فوز بجائزة، نتيجة، صفقة) يبقى should_post = true.
+- عند الشك بين خبر حقيقي متوسط الأهمية وخبر هامشي: إذا فيه اسم محدد + تطور فعلي → انشر، وإذا ما فيه
+  إلا انطباع أو تشويق عام → لا تنشر.
 
 الترجمة (فقط إذا should_post = true):
 - **ممنوع الترجمة الحرفية كلمة-بكلمة.** أعد صياغة الخبر بالكامل بأسلوب محرر رياضي عربي محترف
@@ -741,6 +797,29 @@ async def process_batch(source_id, messages):
     if config.get("skip_if_youtube") and contains_youtube_link(raw_text) and not force_post_here_we_go:
         print(f"⏭️  تم تجاهل منشور — {config['name']} (يحتوي رابط يوتيوب — منشور إعلان فيديو، يُستبعد دائماً)")
         return
+
+    # صور غلاف الفيديو (زر تشغيل ▶ مرسوم داخل الصورة نفسها) — ما تنكشف بالبيانات الوصفية
+    # لأنها صورة عادية تقنياً، فنفحصها بالذكاء الاصطناعي ونستبعد المنشور كامل لو فيها زر تشغيل
+    if config.get("skip_if_play_button") and not force_post_here_we_go:
+        first_photo_msg = next((m for m in media_msgs if m.photo), None)
+        if first_photo_msg:
+            tmp_path = None
+            has_play = False
+            try:
+                tmp_path = await client.download_media(first_photo_msg, file=f"{DOWNLOAD_DIR}/")
+                if tmp_path:
+                    has_play = check_image_has_play_button(tmp_path, config["gemini_key"])
+            except Exception as e:
+                print(f"⚠️ خطأ تحميل صورة لفحص زر التشغيل — {config['name']}: {e}")
+            finally:
+                if tmp_path:
+                    try:
+                        os.remove(tmp_path)
+                    except OSError:
+                        pass
+            if has_play:
+                print(f"⏭️  تم تجاهل منشور — {config['name']} (الصورة غلاف فيديو — فيها زر تشغيل)")
+                return
 
     # فحص نص الصورة بالذكاء الاصطناعي (فقط عند غياب أي تعليق، بوضع ترجمة/إعادة صياغة)
     # هذا يحتاج تحميل صورة واحدة صغيرة فقط — الفيديوهات/الملفات ما تُحمَّل إطلاقاً (انظر تحت)
