@@ -1,15 +1,15 @@
-name: Unified Relay Bot (polling)
+name: Unified Relay Bot (all channels)
 
 on:
   schedule:
-    - cron: "*/10 * * * *"   # احتياط فقط — إذا توقف المُشغّل الخارجي لأي سبب، يضل فيه تشغيل احتياطي كل 10 دقائق
+    - cron: "*/10 * * * *"   # احتياطي فقط — إذا توقف المُشغّل الخارجي لأي سبب، يضل فيه تشغيل احتياطي كل 10 دقائق
   workflow_dispatch:
   repository_dispatch:
-    types: [run-bot]         # يُشغَّل عبر طلب خارجي (cron-job.org) — كل تشغيلة قصيرة وتطفي، نفس مبدأ الجدولة بالضبط
+    types: [run-all-channels] # يُشغَّل عبر طلب خارجي (cron-job.org) — تم تغيير الاسم ليتناسب مع هذا المستودع
 
 concurrency:
-  group: relay-${{ github.workflow }}
-  cancel-in-progress: false   # يمنع تشغيلين متزامنين بنفس TG_SESSION (يفادي AuthKeyDuplicatedError)
+  group: relay-all-channels
+  cancel-in-progress: false   # يمنع تشغيلين متزامنين
 
 permissions:
   contents: write
@@ -17,7 +17,7 @@ permissions:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 15   # وقت كافي لتحميل/رفع فيديوهات بدون ما ينقطع التشغيل بمنتصف الطريق
+    timeout-minutes: 6        # تم تقليله لأن البوت أصبح أسرع ولن يحتاج أكثر من ذلك
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,12 +42,10 @@ jobs:
           TG_API_ID: ${{ secrets.TG_API_ID }}
           TG_API_HASH: ${{ secrets.TG_API_HASH }}
           TG_SESSION: ${{ secrets.TG_SESSION }}
-          GEMINI_KEY_FABRIZ: ${{ secrets.GEMINI_KEY_FABRIZ }}
           GEMINI_KEY_SHAKO: ${{ secrets.GEMINI_KEY_SHAKO }}
           GEMINI_KEY_TECH: ${{ secrets.GEMINI_KEY_TECH }}
-          GEMINI_KEY_AFLAM: ${{ secrets.GEMINI_KEY_AFLAM }}
-          GEMINI_KEY_GTA: ${{ secrets.GEMINI_KEY_GTA }}
-          GEMINI_KEY_MEDIA: ${{ secrets.GEMINI_KEY_MEDIA }}
           GEMINI_KEY_GENERAL: ${{ secrets.GEMINI_KEY_GENERAL }}
           GEMINI_KEY_HADAF: ${{ secrets.GEMINI_KEY_HADAF }}
+          GEMINI_KEY_MEDIA: ${{ secrets.GEMINI_KEY_MEDIA }}
+          GEMINI_KEY_GTA: ${{ secrets.GEMINI_KEY_GTA }}
         run: python main.py
