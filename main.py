@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-بوت الريلي الموحد — نسخة سريعة ومحسنة لقناة فابريزيو رومانو وباقي القنوات.
+بوت الريلي الموحد — نسخة فائقة السرعة (بدون قناة فابريزيو)
 """
 
 import os
@@ -23,7 +23,6 @@ TG_API_ID = int(os.getenv("TG_API_ID"))
 TG_API_HASH = os.getenv("TG_API_HASH")
 TG_SESSION = os.getenv("TG_SESSION")
 
-GEMINI_KEY_FABRIZ = os.getenv("GEMINI_KEY_FABRIZ")
 GEMINI_KEY_TECH = os.getenv("GEMINI_KEY_TECH")
 GEMINI_KEY_GTA = os.getenv("GEMINI_KEY_GTA")
 GEMINI_KEY_GENERAL = os.getenv("GEMINI_KEY_GENERAL")
@@ -38,19 +37,8 @@ DOWNLOAD_DIR = "downloads"
 
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-# ==================== إعدادات القنوات ====================
+# ==================== إعدادات القنوات (تم حذف فابريزيو) ====================
 CHANNELS = {
-    -1001344466508: {
-        "name": "فابريزيو رومانو بالعربي",
-        "target": -1002015818715,
-        "mode": "fabrizio_special",
-        "gemini_key": GEMINI_KEY_FABRIZ,
-        "source_username": "@FabrizioRomanoTG",
-        "skip_if_video": True,
-        "skip_if_youtube": True,
-        "skip_if_play_button": True,
-        "vision_check": True, 
-    },
     -1001565832101: {
         "name": "شكو ماكو بـ كركوك",
         "target": -1001812867607,
@@ -108,7 +96,6 @@ CHANNELS = {
         "add_link": True,
         "link": "@GTA6AR",
         "extra_rules": "إذا ورد أي سعر بالروبل، حوّله للدولار الأمريكي التقريبي.",
-        "vision_check": True,
     },
     -1009917651232: {
         "name": "بثوث المباريات",
@@ -166,19 +153,6 @@ def commit_state():
         print(f"⚠️ git error: {e}")
 
 # ==================== معالجة الوسائط ====================
-def _is_small_thumbnail_photo(photo, abs_threshold=250, square_size_cap=800):
-    try:
-        dims = [(getattr(s, "w", 0), getattr(s, "h", 0)) for s in photo.sizes if hasattr(s, "w")]
-        if not dims: return False
-        max_w = max(w for w, _ in dims)
-        max_h = max(h for _, h in dims)
-        if max_w < abs_threshold and max_h < abs_threshold: return True
-        if max_w > 0 and max_h > 0:
-            ratio = max_w / max_h
-            if 0.85 <= ratio <= 1.18 and max(max_w, max_h) <= square_size_cap: return True
-        return False
-    except Exception: return False
-
 def _message_has_any_video(m):
     media = m.media
     if isinstance(media, MessageMediaDocument): return bool(m.video) or bool(getattr(m, "gif", None))
@@ -197,8 +171,7 @@ def _is_usable_media_msg(m):
     if isinstance(media, (MessageMediaPhoto, MessageMediaDocument)): return True
     if isinstance(media, MessageMediaWebPage):
         wp = getattr(media, "webpage", None)
-        photo = getattr(wp, "photo", None)
-        if photo and not _is_small_thumbnail_photo(photo): return True
+        if getattr(wp, "photo", None): return True
     return False
 
 def _media_payload(m):
@@ -270,39 +243,6 @@ def call_gemini(prompt, api_key, max_retries=3):
             if attempt == max_retries: raise e
             time.sleep(2 ** attempt)
 
-def call_gemini_vision_full(image_path, api_key, check_play_button=False, max_retries=3):
-    if not api_key: return {"has_text": False, "caption": "", "has_play_button": False}
-    try:
-        import base64
-        with open(image_path, "rb") as f: img_b64 = base64.b64encode(f.read()).decode()
-    except Exception: return {"has_text": False, "caption": "", "has_play_button": False}
-
-    mime = "image/png" if image_path.lower().endswith("png") else "image/jpeg"
-    if check_play_button:
-        prompt = 'JSON: {"has_play_button": true/false, "has_text": true/false, "caption": "النص"}'
-    else:
-        prompt = 'JSON: {"has_text": true/false, "caption": "النص"}'
-
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
-    headers = {"x-goog-api-key": api_key, "Content-Type": "application/json"}
-    body = {"contents": [{"parts": [{"inline_data": {"mime_type": mime, "data": img_b64}}, {"text": prompt}]}]}
-    for attempt in range(1, max_retries + 1):
-        try:
-            resp = requests.post(url, json=body, headers=headers, timeout=30)
-            if resp.status_code in (429, 500, 502, 503, 504) and attempt < max_retries:
-                time.sleep(2 ** attempt)
-                continue
-            resp.raise_for_status()
-            raw = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-            if raw.startswith("```"):
-                raw = raw.strip("`").strip()
-                if raw.lower().startswith("json"): raw = raw[4:].strip()
-            result = json.loads(raw)
-            return {"has_text": bool(result.get("has_text", False)), "caption": (result.get("caption") or "").strip(), "has_play_button": bool(result.get("has_play_button", False))}
-        except Exception as e:
-            if attempt == max_retries: return {"has_text": False, "caption": "", "has_play_button": False}
-            time.sleep(2 ** attempt)
-
 def check_is_ad(text, api_key):
     prompt = f'حدد إذا كان إعلاناً (is_ad=true) أو خبراً (false).\nالنص: {text}\nJSON: {{"is_ad": true/false}}'
     try: return bool(call_gemini(prompt, api_key).get("is_ad", False))
@@ -334,24 +274,6 @@ def call_match_links(text, api_key):
     try: return (call_gemini(prompt, api_key).get("text") or "").strip()
     except Exception: return ""
 
-def call_fabrizio(text, api_key):
-    prompt = f"""أنت تنقل تغريدات فابريزيو رومانو الرسمي.
-انشر أي خبر كروي ملموس (صفقات، إصابات، جوائز). (should_post=true).
-الترجمة:
-- **صيغة المتكلم:** (أنا أؤكد، علمت). ممنوع "قال فابريزيو".
-- **أسلوب طبيعي جداً:** أعد صياغته بأسلوب محرر عربي كأنه كتب بالعربي من الأصل، مو ترجمة حرفية.
-- أبقِ "Here we go" بالإنجليزية.
-- لا تضع أي روابط نهائياً.
-النص: {text}
-JSON: {{"should_post": true/false, "text": "النص"}}"""
-    try:
-        res = call_gemini(prompt, api_key)
-        out = re.sub(r'https?://\S+', '', (res.get("text") or text).strip())
-        return {"should_post": bool(res.get("should_post", True)), "text": re.sub(r'\n{3,}', '\n\n', out).strip()}
-    except Exception as e:
-        print(f"❌ خطأ فابريزيو: {e}")
-        return {"should_post": False, "text": ""}
-
 async def apply_processing(config, text):
     mode = config["mode"]
     if not text: return True, ""
@@ -370,10 +292,6 @@ async def apply_processing(config, text):
     elif mode == "rephrase_ar":
         res = call_rephrase(text, config["gemini_key"], config.get("extra_rules"))
         return res["should_post"], res["text"]
-    elif mode == "fabrizio_special":
-        force = bool(re.search(r'here\s*we\s*go', text, re.IGNORECASE))
-        res = call_fabrizio(text, config["gemini_key"])
-        return (bool(res["text"]) and (res["should_post"] or force)), res["text"]
     return True, text
 
 # ==================== النشر ====================
@@ -384,9 +302,7 @@ async def process_batch(source_id, messages):
     raw_text = next((m.message for m in messages if m.message), "")
     text_msg = next((m for m in messages if m.message), None)
 
-    if contains_click_here_phrase(raw_text):
-        print(f"⏭️ تجاهل — {config['name']} (اضغط هنا)")
-        return
+    if contains_click_here_phrase(raw_text): return
 
     hidden_links = extract_hidden_link_urls(text_msg, config.get("source_username"))
     if hidden_links:
@@ -399,40 +315,10 @@ async def process_batch(source_id, messages):
         return
 
     should_post, final_text = await apply_processing(config, cleaned)
-    if not should_post:
-        print(f"⏭️ تجاهل — {config['name']} (فلترة/إعلان)")
-        return
+    if not should_post: return
 
     record_published_text(source_id, cleaned)
     media_msgs = [m for m in messages if _is_usable_media_msg(m)]
-    force_here_we_go = bool(re.search(r'here\s*we\s*go', raw_text, re.IGNORECASE))
-
-    if config.get("skip_if_video") and any(_message_has_any_video(m) for m in messages) and not force_here_we_go:
-        print(f"⏭️ تجاهل — {config['name']} (فيديو)")
-        return
-    if config.get("skip_if_youtube") and contains_youtube_link(raw_text) and not force_here_we_go:
-        print(f"⏭️ تجاهل — {config['name']} (يوتيوب)")
-        return
-
-    first_photo = next((m for m in media_msgs if m.photo), None)
-    if first_photo and config.get("vision_check"):
-        tmp_path = None
-        try:
-            tmp_path = await client.download_media(first_photo, file=f"{DOWNLOAD_DIR}/")
-            if tmp_path:
-                check_play = config.get("skip_if_play_button", False) and not force_here_we_go
-                vision = call_gemini_vision_full(tmp_path, config["gemini_key"], check_play_button=check_play)
-                if check_play and vision["has_play_button"]:
-                    print(f"⏭️ تجاهل — {config['name']} (غلاف فيديو)")
-                    return
-                if not final_text.strip() and vision["has_text"]:
-                    final_text = vision["caption"]
-        except Exception as e:
-            print(f"⚠️ خطأ فحص صورة: {e}")
-        finally:
-            if tmp_path and os.path.exists(tmp_path):
-                try: os.remove(tmp_path)
-                except OSError: pass
 
     if config.get("add_link") and config.get("link"):
         if config.get("link_after_share_phrase") and final_text and insert_link_after_share_phrase(final_text, config["link"]) is not None:
@@ -446,14 +332,12 @@ async def process_batch(source_id, messages):
             if not valid_payloads:
                 if final_text:
                     await client.send_message(config["target"], final_text, parse_mode="html", link_preview=False)
-                    print(f"✅ نُشر نص (وسائط غير صالحة) — {config['name']}")
                 return
             to_send = valid_payloads[0] if len(valid_payloads) == 1 else valid_payloads
             try:
                 await client.send_file(config["target"], to_send, caption=final_text or None, parse_mode="html")
                 print(f"✅ نُشر وسائط — {config['name']}")
             except Exception as e:
-                print(f"⚠️ فشل نسخ مباشر، تحميل احتياطي — {e}")
                 files = []
                 for m in media_msgs:
                     try:
@@ -466,10 +350,8 @@ async def process_batch(source_id, messages):
                     for f in files:
                         try: os.remove(f)
                         except OSError: pass
-                    print(f"✅ نُشر وسائط (احتياطي) — {config['name']}")
                 elif final_text:
                     await client.send_message(config["target"], final_text, parse_mode="html", link_preview=False)
-                    print(f"⚠️ نُشر نص فقط — {config['name']}")
         elif final_text:
             await client.send_message(config["target"], final_text, parse_mode="html", link_preview=False)
             print(f"✅ نُشر نص — {config['name']}")
@@ -513,16 +395,18 @@ async def catch_up_channel(source_id):
 
 async def main():
     await client.start()
-    print("🚀 بدء الفحص السريع...")
+    print("🚀 بدء الفحص للقنوات الستة...")
     for source_id, cfg in CHANNELS.items():
         print(f"⏳ فحص — {cfg['name']}")
         try:
             await catch_up_channel(source_id)
+            commit_state()  # حفظ فوري بعد كل قناة لضمان السرعة
         except Exception as e:
             print(f"❌ فشل قناة {cfg['name']}: {e}")
+            
     await client.disconnect()
     commit_state()
-    print("✅ انتهت التشغيلة بسرعة.")
+    print("✅ انتهت التشغيلة.")
 
 if __name__ == "__main__":
     asyncio.run(main())
